@@ -44,6 +44,9 @@ async function callOpenAI(imageUrls: string[]) {
   return JSON.parse(data.choices[0].message.content);
 }
 
+// Helper για να εισάγουμε μια παύση
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
 serve(async (_req) => {
   try {
     // Χρησιμοποιούμε τα secrets που έχουμε ορίσει εμείς, όχι τα αυτόματα του Supabase, για σαφήνεια.
@@ -96,8 +99,11 @@ serve(async (_req) => {
       try {
         const aiResult = await callOpenAI(imageUrls.map(u => u.url));
 
+        // Βρίσκουμε το πραγματικό όνομα αρχείου για το lot, αν υπάρχει
+        const lotItemName = items.find(item => /lot/i.test(item.object_name))?.object_name;
+        
         const upsertData = {
-          title: aiResult.title || baseName,
+          title: aiResult.title || (lotItemName ? lotItemName.split('/').pop()!.replace(/\.[^/.]+$/, "") : baseName),
           set: aiResult.set,
           condition: aiResult.condition,
           team: aiResult.team,
@@ -116,10 +122,19 @@ serve(async (_req) => {
         const idsToUpdate = items.map(i => i.id);
         await supabaseAdmin.from("image_processing_queue").update({ status: 'done' }).in('id', idsToUpdate);
 
+        // <<<< ΝΕΑ ΠΡΟΣΘΗΚΗ: Παύση 2 δευτερολέπτων για να αποφύγουμε το rate limit
+        await delay(2000);
+
       } catch (e) {
         console.error(`Failed to process group ${baseName}:`, e.message);
         const idsToUpdate = items.map(i => i.id);
-        await supabaseAdmin.from("image_processing_queue").update({ status: 'error' }).in('id', idsToUpdate);
+
+        // Αν το σφάλμα είναι rate limit, μην το αλλάξεις σε 'error', άφησέ το 'pending' για την επόμενη φορά.
+        if (e.message.includes("rate_limit_exceeded")) {
+          console.log(`Rate limit hit for ${baseName}. Leaving as pending.`);
+        } else {
+          await supabaseAdmin.from("image_processing_queue").update({ status: 'error' }).in('id', idsToUpdate);
+        }
       }
     }
 
