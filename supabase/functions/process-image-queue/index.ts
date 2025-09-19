@@ -2,13 +2,31 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode } from "https://deno.land/std@0.177.0/encoding/base64.ts";
 
-// Νέο, πιο έξυπνο prompt για την OpenAI
+// <<-- ΝΕΟ, ΠΟΛΥ ΠΙΟ ΕΞΥΠΝΟ PROMPT -->>
 const OAI_PROMPT = `
-From the provided image(s), extract trading card information.
-Respond in clean JSON format with the following keys: title (player's name), set (card set), condition, team, notes.
-- If the image contains multiple distinct cards (a lot), add a key "kind": "Lot".
-- If the image(s) show a single card (front and back), add "kind": "Single".
-- If you only see one side of a single card, assume "kind": "Single".
+Είσαι ειδικός στις συλλεκτικές κάρτες και ετοιμάζεις περιγραφές για online αγορές (π.χ. eBay).
+Από τις εικόνες που σου δίνονται, κάνε δύο πράγματα:
+1.  **Εξαγωγή Δεδομένων**: Αναγνώρισε τις λεπτομέρειες της κάρτας.
+2.  **Δημιουργία Περιγραφής**: Γράψε μια λεπτομερή και ελκυστική περιγραφή στα Ελληνικά.
+
+Η απάντησή σου ΠΡΕΠΕΙ να είναι σε μορφή JSON.
+
+**JSON Schema:**
+- title: (string) Ο κύριος τίτλος. Για μία κάρτα, το όνομα του παίκτη. Για lot, μια σύνοψη (π.χ., "Lot 2x Real Madrid Numbered Cards").
+- set: (string) Το σετ της κάρτας (π.χ., "Topps Chrome", "Panini Prizm").
+- condition: (string) Η κατάσταση της κάρτας (π.χ., "Near Mint", "Excellent"). Αν δεν είναι σαφές, άφησέ το null.
+- team: (string) Η ομάδα του παίκτη.
+- kind: (string) "Single" ή "Lot".
+- notes: (string) Μια λεπτομερής, καλογραμμένη περιγραφή στα **ΕΛΛΗΝΙΚΑ**, έτοιμη για online αγγελία. Πρέπει να περιλαμβάνει:
+    - Σύνοψη της κάρτας/καρτών.
+    - Όνομα παίκτη, ομάδα, σετ.
+    - Τύπο παραλλαγής (parallel, π.χ., "Purple Parallel", "Refractor"), αρίθμηση (π.χ., "αριθμημένη 020/299"), και άλλα ειδικά χαρακτηριστικά.
+    - Μια τελική πρόταση για να προσελκύσει αγοραστές.
+
+**Παράδειγμα για το πεδίο notes:**
+'Σετ 2 συλλεκτικών παράλληλων, αριθμημένων καρτών Topps με παίκτες της Real Madrid C.F.:\\n- Vinícius Jr. (Forward) – Purple Parallel, αριθμημένη 020/299\\n- Dani Carvajal (Defender) – Red Parallel, αριθμημένη 11/99\\nΔύο σπάνιες και εντυπωσιακές κάρτες Topps, ιδανικές για κάθε φίλο της Real Madrid και συλλέκτη αριθμημένων εκδόσεων.'
+
+Ανέλυσε τις εικόνες προσεκτικά για να βγάλεις όσες περισσότερες λεπτομέρειες μπορείς για την περιγραφή.
 `;
 
 // Helper για να πάρουμε τον τύπο της εικόνας από το όνομα αρχείου
