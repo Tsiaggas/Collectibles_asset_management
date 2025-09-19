@@ -2,31 +2,29 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode } from "https://deno.land/std@0.177.0/encoding/base64.ts";
 
-// <<-- ΝΕΟ, ΠΟΛΥ ΠΙΟ ΕΞΥΠΝΟ PROMPT -->>
+// <<-- ΑΝΑΒΑΘΜΙΣΜΕΝΟ PROMPT v3 -->>
 const OAI_PROMPT = `
-Είσαι ειδικός στις συλλεκτικές κάρτες και ετοιμάζεις περιγραφές για online αγορές (π.χ. eBay).
-Από τις εικόνες που σου δίνονται, κάνε δύο πράγματα:
-1.  **Εξαγωγή Δεδομένων**: Αναγνώρισε τις λεπτομέρειες της κάρτας.
-2.  **Δημιουργία Περιγραφής**: Γράψε μια λεπτομερή και ελκυστική περιγραφή στα Ελληνικά.
+You are an expert trading card identifier, preparing structured data for an asset management tool.
+From the provided images, extract the card's details precisely.
+Your response MUST be in JSON format.
 
-Η απάντησή σου ΠΡΕΠΕΙ να είναι σε μορφή JSON.
+**JSON Schema & Instructions:**
 
-**JSON Schema:**
-- title: (string) Ο κύριος τίτλος. Για μία κάρτα, το όνομα του παίκτη. Για lot, μια σύνοψη (π.χ., "Lot 2x Real Madrid Numbered Cards").
-- set: (string) Το σετ της κάρτας (π.χ., "Topps Chrome", "Panini Prizm").
-- condition: (string) Η κατάσταση της κάρτας (π.χ., "Near Mint", "Excellent"). Αν δεν είναι σαφές, άφησέ το null.
-- team: (string) Η ομάδα του παίκτη.
-- kind: (string) "Single" ή "Lot".
-- notes: (string) Μια λεπτομερής, καλογραμμένη περιγραφή στα **ΕΛΛΗΝΙΚΑ**, έτοιμη για online αγγελία. Πρέπει να περιλαμβάνει:
-    - Σύνοψη της κάρτας/καρτών.
-    - Όνομα παίκτη, ομάδα, σετ.
-    - Τύπο παραλλαγής (parallel, π.χ., "Purple Parallel", "Refractor"), αρίθμηση (π.χ., "αριθμημένη 020/299"), και άλλα ειδικά χαρακτηριστικά.
-    - Μια τελική πρόταση για να προσελκύσει αγοραστές.
+- **title**: (string) A detailed, structured title. CONSTRUCT IT using this template:
+  '[Autograph?] [Player Name] [Year] [Set] [Team] [/Numbering?]'.
+  - ONLY include 'Autograph' if you see a signature on the card.
+  - Player Name, Year, Set, and Team should be identified from the card.
+  - ONLY include the numbering (e.g., '/99') if it's visible.
+  - Example: "Autograph Serge Gnabry 2023-2024 Topps Museum Collection Bayern Munich /99"
+  - Example (no autograph/numbering): "Jamal Musiala 2023 Topps Chrome FC Bayern Munich"
 
-**Παράδειγμα για το πεδίο notes:**
-'Σετ 2 συλλεκτικών παράλληλων, αριθμημένων καρτών Topps με παίκτες της Real Madrid C.F.:\\n- Vinícius Jr. (Forward) – Purple Parallel, αριθμημένη 020/299\\n- Dani Carvajal (Defender) – Red Parallel, αριθμημένη 11/99\\nΔύο σπάνιες και εντυπωσιακές κάρτες Topps, ιδανικές για κάθε φίλο της Real Madrid και συλλέκτη αριθμημένων εκδόσεων.'
-
-Ανέλυσε τις εικόνες προσεκτικά για να βγάλεις όσες περισσότερες λεπτομέρειες μπορείς για την περιγραφή.
+- **set**: (string) The specific set of the card (e.g., "Topps Museum Collection").
+- **condition**: (string) The card's condition (e.g., "Near Mint"). Leave null if unclear.
+- **team**: (string) The player's team.
+- **kind**: (string) "Single" or "Lot".
+- **numbering**: (string) The card's serial number suffix (e.g., "/25", "/49", "/99"). If the card is NOT numbered, use the string "base".
+- **notes**: (string) A **concise description in ENGLISH**. Mention key features like player, team, set, and any special characteristics (e.g., "Autographed card", "Numbered to 99", "Refractor parallel").
+  - Example: "Serge Gnabry autograph card from 2023-2024 Topps Museum Collection. Numbered /99. A great collectible for any Bayern Munich fan."
 `;
 
 // Helper για να πάρουμε τον τύπο της εικόνας από το όνομα αρχείου
@@ -178,6 +176,7 @@ serve(async (_req) => {
           notes: aiResult.notes,
           kind: aiResult.kind || (/lot/i.test(baseName) ? 'Lot' : 'Single'),
           status: 'New',
+          numbering: aiResult.numbering, // <-- Προσθήκη του νέου πεδίου
           image_url_front: imageUrls.find(u => u.type === 'front')?.url || imageUrls.find(u => u.type === 'lot')?.url || imageUrls[0]?.url,
           image_url_back: imageUrls.find(u => u.type === 'back')?.url
         };
