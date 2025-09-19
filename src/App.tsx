@@ -368,7 +368,7 @@ export const App: React.FC = () => {
                   <button className="btn" onClick={() => setEdit({ open: true, item: it })}>Edit</button>
                   <button className="btn" onClick={() => updateItem({ ...it, status: nextStatus(it.status) })}>Next status</button>
                   <a
-                    href={`https://130point.com/sales/?q=${encodeURIComponent(it.title || '')}`}
+                    href={`https://130point.com/sales/?search_text=${encodeURIComponent(it.title || '')}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded transition-colors inline-flex items-center"
