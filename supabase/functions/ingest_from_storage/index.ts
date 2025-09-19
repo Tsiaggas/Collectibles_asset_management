@@ -64,7 +64,9 @@ serve(async (req) => {
     const serviceRole = Deno.env.get('SERVICE_ROLE_KEY');
     if (!urlBase || !serviceRole) return jsonResponse({ error: 'Missing PROJECT_URL or SERVICE_ROLE_KEY' }, 500);
 
-    const publicUrl = `${urlBase}/storage/v1/object/public/${bucket}/${encodeURIComponent(path)}`;
+    // Δημιουργία public URL χωρίς να κωδικοποιούνται τα '/'
+    const encodedPath = String(path).split('/').map(encodeURIComponent).join('/');
+    const publicUrl = `${urlBase}/storage/v1/object/public/${bucket}/${encodedPath}`;
 
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     const extracted = await extractViaOpenAI(publicUrl, OPENAI_API_KEY);
@@ -85,18 +87,19 @@ serve(async (req) => {
     };
 
     // Upsert in DB
-    const res = await fetch(`${urlBase}/rest/v1/cards?select=*`, {
+    const res = await fetch(`${urlBase}/rest/v1/cards?on_conflict=title_norm&select=*`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'apikey': serviceRole,
         'Authorization': `Bearer ${serviceRole}`,
-        'Prefer': 'resolution=merge-duplicates,return=representation',
+        'Prefer': 'resolution=ignore-duplicates,return=representation',
       },
       body: JSON.stringify(body),
     });
     if (!res.ok) {
       const txt = await res.text();
+      console.error('DB upsert failed', txt);
       return jsonResponse({ error: 'DB upsert failed', details: txt }, 500);
     }
     const data = await res.json();
