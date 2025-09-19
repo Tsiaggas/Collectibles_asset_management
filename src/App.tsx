@@ -7,6 +7,7 @@ import { hasSupabase, supabase, rowToItem, itemToInsert, itemToUpdate } from './
 import { Modal } from './components/Modal';
 import { Toast } from './components/Toast';
 import { Checkbox, Select, TextArea, TextInput } from './components/Inputs';
+import { ImageUploader } from './components/ImageUploader';
 
 const DEFAULT_DRIVE_FOLDER = 'CardInventory_MVP';
 
@@ -27,6 +28,7 @@ export const App: React.FC = () => {
   const [teamOptions, setTeamOptions] = useState<string[]>([]);
   const [numberingOptions, setNumberingOptions] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [bulkText, setBulkText] = useState('');
   // Bulk images & AI removed for simplicity
   const [edit, setEdit] = useState<EditState>({ open: false });
@@ -283,6 +285,7 @@ export const App: React.FC = () => {
         <h1 className="text-xl font-semibold">Card Inventory MVP</h1>
         <div className="flex flex-wrap items-center gap-2">
           <span className="pill bg-gray-200 dark:bg-gray-700">{hasSupabase ? 'Mode: Supabase' : 'Supabase: not configured'}</span>
+          <button className="btn btn-primary" onClick={() => setUploadOpen(true)}>Upload Images</button>
           <button className="btn" onClick={() => setBulkOpen(true)}>Bulk import</button>
           {/* Bulk images removed */}
           <button className="btn" onClick={exportJson}>Export JSON</button>
@@ -373,6 +376,10 @@ export const App: React.FC = () => {
           ))}
         </ul>
       )}
+
+      <Modal open={uploadOpen} title="Upload Card Images" onClose={() => setUploadOpen(false)}>
+        <ImageUploader onComplete={() => setUploadOpen(false)} />
+      </Modal>
 
       <Modal open={bulkOpen} title="Bulk Import" onClose={() => setBulkOpen(false)}>
         <div className="space-y-3">
