@@ -454,7 +454,15 @@ Single\tGengar\tFossil\tLP\t39.9\tyes\ttrue\t0\tInactive\t\tshadow`}
               {statusOptions.map((s) => (<option key={s} value={s}>{s}</option>))}
             </Select>
             <TextInput placeholder="Image URL" value={edit.item.imageUrl ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, imageUrl: e.target.value } })} />
-            <TextInput placeholder="Notes" value={edit.item.notes ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, notes: e.target.value } })} />
+            {/* ΑΛΛΑΓΗ: TextInput -> TextArea για μεγαλύτερο πεδίο */}
+            <div className="sm:col-span-2">
+              <TextArea 
+                placeholder="Notes" 
+                rows={8}
+                value={edit.item.notes ?? ''} 
+                onChange={(e) => setEdit({ open: true, item: { ...edit.item!, notes: e.target.value } })} 
+              />
+            </div>
             <Select value={edit.item.kind ?? 'Single'} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, kind: e.target.value as any } })}>
               <option value="Single">Single</option>
               <option value="Lot">Lot</option>
