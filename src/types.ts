@@ -4,7 +4,7 @@ export type PlatformFlags = {
   ebay: boolean;
 };
 
-export type CardStatus = 'Available' | 'Listed' | 'Inactive' | 'Sold';
+export type CardStatus = 'New' | 'Available' | 'Listed' | 'Inactive' | 'Sold';
 
 export interface CardItem {
   id: string;
@@ -47,6 +47,8 @@ export const DEFAULT_PLACEHOLDER_IMAGE =
 
 export const nextStatus = (status: CardStatus): CardStatus => {
   switch (status) {
+    case 'New':
+      return 'Available';
     case 'Available':
       return 'Listed';
     case 'Listed':

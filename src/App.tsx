@@ -276,7 +276,7 @@ export const App: React.FC = () => {
     notes: '',
   });
 
-  const statusOptions: CardStatus[] = ['Available', 'Listed', 'Inactive', 'Sold'];
+  const statusOptions: CardStatus[] = ['New', 'Available', 'Listed', 'Inactive', 'Sold'];
 
   return (
     <div className="mx-auto max-w-6xl p-4">
