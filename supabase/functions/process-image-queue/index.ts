@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encode } from "https://deno.land/std@0.177.0/encoding/base64.ts";
 
 // Νέο, πιο έξυπνο prompt για την OpenAI
 const OAI_PROMPT = `
@@ -10,14 +11,56 @@ Respond in clean JSON format with the following keys: title (player's name), set
 - If you only see one side of a single card, assume "kind": "Single".
 `;
 
-// Helper για να καλέσουμε την OpenAI
-async function callOpenAI(imageUrls: string[]) {
+// Helper για να πάρουμε τον τύπο της εικόνας από το όνομα αρχείου
+function getMimeType(filename: string): string {
+  const extension = filename.split('.').pop()?.toLowerCase();
+  switch (extension) {
+    case 'png':
+      return 'image/png';
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'webp':
+      return 'image/webp';
+    case 'gif':
+      return 'image/gif';
+    default:
+      return 'image/jpeg'; // Default σε JPEG
+  }
+}
+
+// <<-- ΑΝΑΒΑΘΜΙΣΜΕΝΗ FUNCTION -->>
+// Τώρα δέχεται τα items και τον supabase client για να κατεβάσει τις εικόνες η ίδια
+async function callOpenAI(items: any[], supabaseAdmin: SupabaseClient) {
   const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
   if (!OPENAI_API_KEY) throw new Error("Missing OPENAI_API_KEY");
 
+  // Μετατροπή κάθε εικόνας σε base64
+  const imageContents = await Promise.all(items.map(async (item) => {
+    // 1. Κατεβάζουμε το αρχείο
+    const { data: blob, error } = await supabaseAdmin.storage
+      .from(item.bucket_id)
+      .download(item.object_name);
+
+    if (error) {
+      throw new Error(`Failed to download ${item.object_name}: ${error.message}`);
+    }
+
+    // 2. Το μετατρέπουμε σε base64
+    const arrayBuffer = await blob.arrayBuffer();
+    const base64String = encode(arrayBuffer);
+    const mimeType = getMimeType(item.object_name);
+
+    // 3. Το ετοιμάζουμε για το payload του API
+    return {
+      type: "image_url",
+      image_url: { url: `data:${mimeType};base64,${base64String}` },
+    };
+  }));
+
   const content = [
     { type: "text", text: OAI_PROMPT },
-    ...imageUrls.map(url => ({ type: "image_url", image_url: { url } }))
+    ...imageContents, // Στέλνουμε τα δεδομένα της εικόνας, όχι URL
   ];
 
   const payload = {
@@ -36,8 +79,14 @@ async function callOpenAI(imageUrls: string[]) {
   });
 
   if (!res.ok) {
-    const error = await res.text();
-    throw new Error(`OpenAI API failed: ${error}`);
+    const errorText = await res.text();
+    // Προσπαθούμε να κάνουμε parse το error για καλύτερο logging
+    try {
+      const errorJson = JSON.parse(errorText);
+      throw new Error(`OpenAI API failed: ${errorJson.error.message}`);
+    } catch {
+      throw new Error(`OpenAI API failed: ${errorText}`);
+    }
   }
 
   const data = await res.json();
@@ -56,7 +105,7 @@ serve(async (_req) => {
       Deno.env.get("SERVICE_ROLE_KEY")!
     );
 
-    // 1. Παίρνουμε όλα τα "pending" αρχεία από την ουρά
+    // 1. Παίρνουμε τα "pending" αρχεία από την ουρά
     const { data: queueItems, error: queueError } = await supabaseAdmin
       .from("image_processing_queue")
       .select("*")
@@ -86,18 +135,19 @@ serve(async (_req) => {
     // 3. Επεξεργασία κάθε ομάδας
     for (const [baseName, items] of groupedFiles.entries()) {
       console.log(`Processing group: ${baseName}`);
-
-      // Παίρνουμε τα public URLs για όλες τις εικόνες της ομάδας
-      const imageUrls: { url: string, type: 'front' | 'back' | 'lot' }[] = items.map(item => {
-        const url = `${Deno.env.get("PROJECT_URL")}/storage/v1/object/public/${item.bucket_id}/${item.object_name}`;
-        let type: 'front' | 'back' | 'lot' = 'lot';
-        if (/front/i.test(item.object_name)) type = 'front';
-        if (/back/i.test(item.object_name)) type = 'back';
-        return { url, type };
-      });
       
       try {
-        const aiResult = await callOpenAI(imageUrls.map(u => u.url));
+        // <<-- ΑΛΛΑΓΗ: Καλούμε την callOpenAI με τα items και τον supabaseAdmin
+        const aiResult = await callOpenAI(items, supabaseAdmin);
+
+        // (Τα public URLs τα χρειαζόμαστε ακόμα για να τα αποθηκεύσουμε στη βάση)
+        const imageUrls: { url: string, type: 'front' | 'back' | 'lot' }[] = items.map(item => {
+          const url = `${Deno.env.get("PROJECT_URL")}/storage/v1/object/public/${item.bucket_id}/${item.object_name}`;
+          let type: 'front' | 'back' | 'lot' = 'lot';
+          if (/front/i.test(item.object_name)) type = 'front';
+          if (/back/i.test(item.object_name)) type = 'back';
+          return { url, type };
+        });
 
         // Βρίσκουμε το πραγματικό όνομα αρχείου για το lot, αν υπάρχει
         const lotItemName = items.find(item => /lot/i.test(item.object_name))?.object_name;
@@ -110,7 +160,7 @@ serve(async (_req) => {
           notes: aiResult.notes,
           kind: aiResult.kind || (/lot/i.test(baseName) ? 'Lot' : 'Single'),
           status: 'New',
-          image_url_front: imageUrls.find(u => u.type === 'front')?.url || imageUrls[0]?.url,
+          image_url_front: imageUrls.find(u => u.type === 'front')?.url || imageUrls.find(u => u.type === 'lot')?.url || imageUrls[0]?.url,
           image_url_back: imageUrls.find(u => u.type === 'back')?.url
         };
         
@@ -122,7 +172,7 @@ serve(async (_req) => {
         const idsToUpdate = items.map(i => i.id);
         await supabaseAdmin.from("image_processing_queue").update({ status: 'done' }).in('id', idsToUpdate);
 
-        // <<<< ΝΕΑ ΠΡΟΣΘΗΚΗ: Παύση 2 δευτερολέπτων για να αποφύγουμε το rate limit
+        // Παύση για να αποφύγουμε το rate limit
         await delay(2000);
 
       } catch (e) {
