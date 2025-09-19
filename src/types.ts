@@ -10,13 +10,15 @@ export interface CardItem {
   id: string;
   kind?: 'Single' | 'Lot';
   team?: string;
+  numbering?: string; // π.χ. "/99" ή "base"
   title: string;
   set?: string;
   condition?: string;
   price?: number;
   platforms: PlatformFlags;
   status: CardStatus;
-  imageUrl?: string;
+  image_url_front?: string;
+  image_url_back?: string;
   notes?: string;
   createdAt: string; // ISO string
 }

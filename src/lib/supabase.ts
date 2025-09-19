@@ -30,20 +30,26 @@ type DbRow = {
   created_at: string;
 };
 
-export function rowToItem(r: DbRow): CardItem {
+export function rowToItem(row: any): CardItem {
   return {
-    id: r.id,
-    kind: (r.kind ?? undefined) as CardItem['kind'],
-    team: r.team ?? undefined,
-    title: r.title,
-    set: r.set ?? undefined,
-    condition: r.condition ?? undefined,
-    price: r.price ?? undefined,
-    platforms: { vinted: r.vinted, vendora: r.vendora, ebay: r.ebay },
-    status: r.status,
-    imageUrl: r.image_url ?? undefined,
-    notes: r.notes ?? undefined,
-    createdAt: r.created_at,
+    id: row.id,
+    kind: row.kind ?? 'Single',
+    team: row.team ?? undefined,
+    numbering: row.numbering ?? undefined,
+    title: row.title,
+    set: row.set ?? undefined,
+    condition: row.condition ?? undefined,
+    price: row.price ?? undefined,
+    platforms: {
+      vinted: row.vinted ?? false,
+      vendora: row.vendora ?? false,
+      ebay: row.ebay ?? false,
+    },
+    status: row.status ?? 'Available',
+    image_url_front: row.image_url_front ?? undefined,
+    image_url_back: row.image_url_back ?? undefined,
+    notes: row.notes ?? undefined,
+    createdAt: row.created_at,
   };
 }
 
@@ -59,8 +65,12 @@ export function itemToInsert(item: Omit<CardItem, 'id' | 'createdAt'>) {
     vendora: item.platforms.vendora,
     ebay: item.platforms.ebay,
     status: item.status,
-    image_url: item.imageUrl ?? null,
-    notes: item.notes ?? null,
+    notes: item.notes,
+    kind: item.kind,
+    team: item.team,
+    numbering: item.numbering,
+    image_url_front: item.image_url_front,
+    image_url_back: item.image_url_back,
   };
 }
 
@@ -76,8 +86,12 @@ export function itemToUpdate(item: CardItem) {
     vendora: item.platforms.vendora,
     ebay: item.platforms.ebay,
     status: item.status,
-    image_url: item.imageUrl ?? null,
-    notes: item.notes ?? null,
+    notes: item.notes,
+    kind: item.kind,
+    team: item.team,
+    numbering: item.numbering,
+    image_url_front: item.image_url_front,
+    image_url_back: item.image_url_back,
   };
 }
 

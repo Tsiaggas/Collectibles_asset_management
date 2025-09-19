@@ -346,7 +346,7 @@ export const App: React.FC = () => {
           <Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as CardStatus })}>
             {statusOptions.map((s) => (<option key={s} value={s}>{s}</option>))}
           </Select>
-          <TextInput placeholder="Image URL" value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
+          {/* Αφαίρεση των πεδίων για URL, προστίθενται αυτόματα */}
           <TextInput placeholder="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           <div>
             <button className="btn btn-primary w-full" onClick={() => {
@@ -360,10 +360,9 @@ export const App: React.FC = () => {
                 price: form.price,
                 platforms: form.platforms,
                 status: form.status,
-                imageUrl: form.imageUrl?.trim() || undefined,
                 notes: form.notes?.trim() || undefined,
               });
-              setForm({ title: '', team: '', set: '', condition: '', price: undefined, platforms: { vinted: false, vendora: false, ebay: false }, status: 'Available', imageUrl: '', notes: '', kind: 'Single' } as any);
+              setForm({ title: '', team: '', set: '', condition: '', price: undefined, platforms: { vinted: false, vendora: false, ebay: false }, status: 'Available', notes: '', kind: 'Single' } as any);
             }}>Προσθήκη</button>
           </div>
         </div>
@@ -377,7 +376,7 @@ export const App: React.FC = () => {
             <li key={it.id} className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
               <div className="aspect-[4/2.5] w-full bg-gray-100 dark:bg-gray-700">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={it.imageUrl || DEFAULT_PLACEHOLDER_IMAGE} alt={it.title} className="h-full w-full object-contain" />
+                <img src={it.image_url_front || DEFAULT_PLACEHOLDER_IMAGE} alt={it.title} className="h-full w-full object-contain" />
               </div>
               <div className="p-3 space-y-2">
                 <div className="flex items-start justify-between gap-2">
@@ -396,6 +395,7 @@ export const App: React.FC = () => {
                   </div>
                 </div>
                 {it.team && <div className="text-xs text-emerald-700 dark:text-emerald-300">Team: {it.team}</div>}
+                {it.numbering && <div className="text-xs font-bold text-sky-700 dark:text-sky-300">Numbering: {it.numbering}</div>}
                 <div className="flex items-center gap-2">
                   <button className="btn" onClick={() => setEdit({ open: true, item: it })}>Edit</button>
                   <button className="btn" onClick={() => updateItem({ ...it, status: nextStatus(it.status) })}>Next status</button>
@@ -444,38 +444,54 @@ Single\tGengar\tFossil\tLP\t39.9\tyes\ttrue\t0\tInactive\t\tshadow`}
 
       <Modal open={edit.open} title="Επεξεργασία" onClose={() => setEdit({ open: false })}>
         {edit.item && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <TextInput placeholder="Title" value={edit.item.title} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, title: e.target.value } })} />
-            <TextInput placeholder="Set" value={edit.item.set ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, set: e.target.value } })} />
-            <TextInput placeholder="Team" value={edit.item.team ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, team: e.target.value } })} />
-            <TextInput placeholder="Condition" value={edit.item.condition ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, condition: e.target.value } })} />
-            <TextInput placeholder="Price" type="number" inputMode="decimal" value={edit.item.price ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, price: e.target.value ? Number(e.target.value) : undefined } })} />
-            <Select value={edit.item.status} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, status: e.target.value as CardStatus } })}>
-              {statusOptions.map((s) => (<option key={s} value={s}>{s}</option>))}
-            </Select>
-            <TextInput placeholder="Image URL" value={edit.item.imageUrl ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, imageUrl: e.target.value } })} />
-            {/* ΑΛΛΑΓΗ: TextInput -> TextArea για μεγαλύτερο πεδίο */}
-            <div className="sm:col-span-2">
-              <TextArea 
-                placeholder="Notes" 
-                rows={8}
-                value={edit.item.notes ?? ''} 
-                onChange={(e) => setEdit({ open: true, item: { ...edit.item!, notes: e.target.value } })} 
-              />
+          <div className="space-y-4">
+            {/* Image Previews & Download Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Front Image</label>
+                <img src={edit.item.image_url_front || DEFAULT_PLACEHOLDER_IMAGE} alt="Front view" className="w-full rounded-lg object-contain border dark:border-gray-700" />
+                {edit.item.image_url_front && <a href={edit.item.image_url_front} download target="_blank" rel="noopener noreferrer" className="btn w-full">Download Front</a>}
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Back Image</label>
+                <img src={edit.item.image_url_back || DEFAULT_PLACEHOLDER_IMAGE} alt="Back view" className="w-full rounded-lg object-contain border dark:border-gray-700" />
+                {edit.item.image_url_back && <a href={edit.item.image_url_back} download target="_blank" rel="noopener noreferrer" className="btn w-full">Download Back</a>}
+              </div>
             </div>
-            <Select value={edit.item.kind ?? 'Single'} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, kind: e.target.value as any } })}>
-              <option value="Single">Single</option>
-              <option value="Lot">Lot</option>
-            </Select>
-            <div className="sm:col-span-2 flex items-center gap-4">
-              <label className="inline-flex items-center gap-2"><input className="checkbox" type="checkbox" checked={edit.item.platforms.vinted} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, platforms: { ...edit.item!.platforms, vinted: e.target.checked } } })}/>Vinted</label>
-              <label className="inline-flex items-center gap-2"><input className="checkbox" type="checkbox" checked={edit.item.platforms.vendora} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, platforms: { ...edit.item!.platforms, vendora: e.target.checked } } })}/>Vendora</label>
-              <label className="inline-flex items-center gap-2"><input className="checkbox" type="checkbox" checked={edit.item.platforms.ebay} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, platforms: { ...edit.item!.platforms, ebay: e.target.checked } } })}/>eBay</label>
-            </div>
-            {/* AI buttons removed for simplicity */}
-            <div className="sm:col-span-2 flex gap-2">
-              <button className="btn btn-primary" onClick={() => { updateItem(edit.item!); setEdit({ open: false }); }}>Αποθήκευση</button>
-              <button className="btn" onClick={() => setEdit({ open: false })}>Άκυρο</button>
+
+            {/* Form Fields */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <TextInput placeholder="Title" value={edit.item.title} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, title: e.target.value } })} />
+              <TextInput placeholder="Set" value={edit.item.set ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, set: e.target.value } })} />
+              <TextInput placeholder="Team" value={edit.item.team ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, team: e.target.value } })} />
+              <TextInput placeholder="Condition" value={edit.item.condition ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, condition: e.target.value } })} />
+              <TextInput placeholder="Numbering" value={edit.item.numbering ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, numbering: e.target.value } })} />
+              <TextInput placeholder="Price" type="number" inputMode="decimal" value={edit.item.price ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, price: e.target.value ? Number(e.target.value) : undefined } })} />
+              <Select value={edit.item.status} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, status: e.target.value as CardStatus } })}>
+                {statusOptions.map((s) => (<option key={s} value={s}>{s}</option>))}
+              </Select>
+              <Select value={edit.item.kind ?? 'Single'} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, kind: e.target.value as any } })}>
+                <option value="Single">Single</option>
+                <option value="Lot">Lot</option>
+              </Select>
+              <div className="sm:col-span-2">
+                <TextArea 
+                  placeholder="Notes" 
+                  rows={8}
+                  value={edit.item.notes ?? ''} 
+                  onChange={(e) => setEdit({ open: true, item: { ...edit.item!, notes: e.target.value } })} 
+                />
+              </div>
+              <div className="sm:col-span-2 flex items-center gap-4">
+                <label className="inline-flex items-center gap-2"><input className="checkbox" type="checkbox" checked={edit.item.platforms.vinted} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, platforms: { ...edit.item!.platforms, vinted: e.target.checked } } })}/>Vinted</label>
+                <label className="inline-flex items-center gap-2"><input className="checkbox" type="checkbox" checked={edit.item.platforms.vendora} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, platforms: { ...edit.item!.platforms, vendora: e.target.checked } } })}/>Vendora</label>
+                <label className="inline-flex items-center gap-2"><input className="checkbox" type="checkbox" checked={edit.item.platforms.ebay} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, platforms: { ...edit.item!.platforms, ebay: e.target.checked } } })}/>eBay</label>
+              </div>
+              {/* AI buttons removed for simplicity */}
+              <div className="sm:col-span-2 flex gap-2">
+                <button className="btn btn-primary" onClick={() => { updateItem(edit.item!); setEdit({ open: false }); }}>Αποθήκευση</button>
+                <button className="btn" onClick={() => setEdit({ open: false })}>Άκυρο</button>
+              </div>
             </div>
           </div>
         )}
