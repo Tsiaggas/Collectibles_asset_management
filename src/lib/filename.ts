@@ -152,6 +152,21 @@ export function parseFromFilename(filename: string): ParsedFromFilename {
   return result;
 }
 
+export function sanitize(filename: string): string {
+  // 1. Αφαιρεί την επέκταση του αρχείου για να τη διαχειριστούμε ξεχωριστά
+  const extension = filename.slice(filename.lastIndexOf('.'));
+  const name = filename.slice(0, filename.lastIndexOf('.'));
+
+  // 2. Μετατρέπει σε πεζά, αντικαθιστά κενά με παύλες, και αφαιρεί όλους τους μη-επιτρεπτούς χαρακτήρες
+  const cleanedName = name
+    .toLowerCase()
+    .replace(/\s+/g, '-') // Αντικατάσταση κενών με παύλες
+    .replace(/[^a-z0-9-]/g, ''); // Αφαίρεση όλων εκτός από γράμματα, αριθμούς, και παύλες
+
+  // 3. Ενώνει ξανά το καθαρό όνομα με την επέκταση
+  return `${cleanedName}${extension}`;
+}
+
 function cleanWord(w: string): string {
   return w.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').replace(/[^\p{L}\p{N}\s]/gu, '').trim();
 }
