@@ -55,12 +55,10 @@ export function rowToItem(row: any): CardItem {
 
 export function itemToInsert(item: Omit<CardItem, 'id' | 'createdAt'>) {
   return {
-    kind: item.kind ?? 'Single',
-    team: item.team ?? null,
     title: item.title,
-    set: item.set ?? null,
-    condition: item.condition ?? null,
-    price: item.price ?? null,
+    set: item.set,
+    condition: item.condition,
+    price: item.price,
     vinted: item.platforms.vinted,
     vendora: item.platforms.vendora,
     ebay: item.platforms.ebay,
@@ -76,12 +74,10 @@ export function itemToInsert(item: Omit<CardItem, 'id' | 'createdAt'>) {
 
 export function itemToUpdate(item: CardItem) {
   return {
-    kind: item.kind ?? 'Single',
-    team: item.team ?? null,
     title: item.title,
-    set: item.set ?? null,
-    condition: item.condition ?? null,
-    price: item.price ?? null,
+    set: item.set,
+    condition: item.condition,
+    price: item.price,
     vinted: item.platforms.vinted,
     vendora: item.platforms.vendora,
     ebay: item.platforms.ebay,
