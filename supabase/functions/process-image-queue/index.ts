@@ -20,12 +20,26 @@ Your response MUST be in JSON format.
 
 - **set**: (string) The specific set of the card (e.g., "Topps Museum Collection").
 - **condition**: (string) The card's condition (e.g., "Near Mint"). Leave null if unclear.
-- **team**: (string) The player's team.
+- **team**: (string) The player's team. IMPORTANT: Be consistent. For Bayern, always return "FC Bayern Munich".
 - **kind**: (string) "Single" or "Lot".
 - **numbering**: (string) The card's serial number suffix (e.g., "/25", "/49", "/99"). If the card is NOT numbered, use the string "base".
 - **notes**: (string) A **concise description in ENGLISH**. Mention key features like player, team, set, and any special characteristics (e.g., "Autographed card", "Numbered to 99", "Refractor parallel").
   - Example: "Serge Gnabry autograph card from 2023-2024 Topps Museum Collection. Numbered /99. A great collectible for any Bayern Munich fan."
 `;
+
+// Helper για "καθαρισμό" ονομάτων ομάδων
+const teamNameMap: { [key: string]: string } = {
+  'fc bayern münchen': 'FC Bayern Munich',
+  'bayern munich': 'FC Bayern Munich',
+  'bayern münchen': 'FC Bayern Munich',
+  // Πρόσθεσε εδώ κι άλλες παραλλαγές στο μέλλον
+};
+
+function normalizeTeamName(name: string | null | undefined): string | undefined {
+  if (!name) return undefined;
+  const lowerCaseName = name.trim().toLowerCase();
+  return teamNameMap[lowerCaseName] || name.trim();
+}
 
 // Helper για να πάρουμε τον τύπο της εικόνας από το όνομα αρχείου
 function getMimeType(filename: string): string {
@@ -156,6 +170,9 @@ serve(async (_req) => {
         // <<-- ΑΛΛΑΓΗ: Καλούμε την callOpenAI με τα items και τον supabaseAdmin
         const aiResult = await callOpenAI(items, supabaseAdmin);
 
+        // <<-- ΝΕΟ: Εφαρμόζουμε τον "καθαριστή" στο όνομα της ομάδας
+        const normalizedTeam = normalizeTeamName(aiResult.team);
+
         // (Τα public URLs τα χρειαζόμαστε ακόμα για να τα αποθηκεύσουμε στη βάση)
         const imageUrls: { url: string, type: 'front' | 'back' | 'lot' }[] = items.map(item => {
           const url = `${Deno.env.get("PROJECT_URL")}/storage/v1/object/public/${item.bucket_id}/${item.object_name}`;
@@ -172,7 +189,7 @@ serve(async (_req) => {
           title: aiResult.title || (lotItemName ? lotItemName.split('/').pop()!.replace(/\.[^/.]+$/, "") : baseName),
           set: aiResult.set,
           condition: aiResult.condition,
-          team: aiResult.team,
+          team: normalizedTeam, // <-- Αποθηκεύουμε την "καθαρή" εκδοχή
           notes: aiResult.notes,
           kind: aiResult.kind || (/lot/i.test(baseName) ? 'Lot' : 'Single'),
           status: 'New',
