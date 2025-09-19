@@ -84,6 +84,10 @@ export const App: React.FC = () => {
 
   async function addItem(newItem: Omit<CardItem, 'id' | 'createdAt'>) {
     if (!hasSupabase) { setToast('Supabase δεν έχει ρυθμιστεί'); return; }
+    // Skip διπλότυπο τίτλο (σε σχέση με τα ήδη φορτωμένα στοιχεία)
+    const normalize = (s: string) => s.trim().toLowerCase();
+    const exists = items.some((i) => normalize(i.title) === normalize(newItem.title));
+    if (exists) { setToast('Υπάρχει ήδη κάρτα με αυτόν τον τίτλο — έγινε skip'); return; }
     // 1st try με πλήρες schema
     const { data, error } = await supabase
       .from('cards')
@@ -178,10 +182,24 @@ export const App: React.FC = () => {
         const parsed = JSON.parse(String(reader.result));
         const list: any[] = Array.isArray(parsed?.items) ? parsed.items : (Array.isArray(parsed) ? parsed : []);
         if (!Array.isArray(list) || list.length === 0) { setToast('Το JSON δεν περιέχει items'); return; }
-        const toInsert = list.map((i) => itemToInsert({
+        // Skip διπλότυπα ως προς title (υπάρχοντα και εντός JSON)
+        const normalize = (s: string) => (s || '').trim().toLowerCase();
+        const existingTitles = new Set(items.map((it) => normalize(it.title)));
+        const seenInBatch = new Set<string>();
+        const filteredList = list.filter((i) => {
+          const t = normalize(i?.title || '');
+          if (!t) return false;
+          if (existingTitles.has(t)) return false;
+          if (seenInBatch.has(t)) return false;
+          seenInBatch.add(t);
+          return true;
+        });
+        if (filteredList.length === 0) { setToast('Όλα τα JSON items ήταν διπλότυπα τίτλου — δεν έγινε εισαγωγή'); return; }
+        const skipped = list.length - filteredList.length;
+        const toInsert = filteredList.map((i) => itemToInsert({
           kind: i.kind ?? 'Single',
           team: i.team ?? undefined,
-          title: i.title,
+          title: String(i.title ?? '').trim(),
           set: i.set ?? undefined,
           condition: i.condition ?? undefined,
           price: i.price ?? undefined,
@@ -193,7 +211,7 @@ export const App: React.FC = () => {
         const { data, error } = await supabase.from('cards').insert(toInsert).select('*');
         if (error) { setToast('Σφάλμα κατά το import στη Supabase'); return; }
         setItems((prev) => [ ...(data ?? []).map(rowToItem), ...prev ]);
-        setToast(`Import ολοκληρώθηκε (${data?.length ?? 0})`);
+        setToast(`Import ολοκληρώθηκε (${data?.length ?? 0})${skipped > 0 ? ` (skip ${skipped} διπλότυπα)` : ''}`);
       } catch {
         setToast('Σφάλμα στο import JSON');
       }
@@ -209,13 +227,30 @@ export const App: React.FC = () => {
       setToast('Δεν βρέθηκαν έγκυρες γραμμές');
       return;
     }
-    const payload = newItems.map((ni) => itemToInsert(ni));
+    // Skip διπλότυπα με βάση τον τίτλο (σε σχέση με υπάρχοντα και εντός του ίδιου import)
+    const normalize = (s: string) => s.trim().toLowerCase();
+    const existingTitles = new Set(items.map((i) => normalize(i.title)));
+    const seenInBatch = new Set<string>();
+    const uniqueNewItems = newItems.filter((i) => {
+      const t = normalize(i.title);
+      if (!t) return false;
+      if (existingTitles.has(t)) return false;
+      if (seenInBatch.has(t)) return false;
+      seenInBatch.add(t);
+      return true;
+    });
+    if (uniqueNewItems.length === 0) {
+      setToast('Όλες οι γραμμές ήταν διπλότυπες τίτλου — δεν έγινε εισαγωγή');
+      return;
+    }
+    const skipped = newItems.length - uniqueNewItems.length;
+    const payload = uniqueNewItems.map((ni) => itemToInsert(ni));
     const { data, error } = await supabase.from('cards').insert(payload).select('*');
     if (error) { setToast('Σφάλμα import στη Supabase'); return; }
     setItems((prev) => [ ...(data ?? []).map(rowToItem), ...prev ]);
     setBulkText('');
     setBulkOpen(false);
-    setToast(`Έγινε import ${data?.length ?? 0} καρτών`);
+    setToast(`Έγινε import ${data?.length ?? 0} καρτών${skipped > 0 ? ` (skip ${skipped} διπλότυπα)` : ''}`);
   }
 
   // Drive functions removed
