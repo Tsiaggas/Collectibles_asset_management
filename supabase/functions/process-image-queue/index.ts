@@ -61,7 +61,7 @@ serve(async (_req) => {
       .from("image_processing_queue")
       .select("*")
       .eq("status", "pending")
-      .limit(10); // Βάζουμε ένα όριο για να μην πέσει η function
+      .limit(3); // <<-- ΤΕΛΙΚΗ ΡΥΘΜΙΣΗ: Μόνο 3 αρχεία τη φορά για να είμαστε κάτω από το όριο της OpenAI
 
     if (queueError) throw queueError;
     if (!queueItems || queueItems.length === 0) {
