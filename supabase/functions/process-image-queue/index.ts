@@ -197,10 +197,19 @@ serve(async (_req) => {
         console.error(`Failed to process group ${baseName}:`, e.message);
         const idsToUpdate = items.map(i => i.id);
 
-        // Αν το σφάλμα είναι rate limit, μην το αλλάξεις σε 'error', άφησέ το 'pending' για την επόμενη φορά.
-        if (e.message.includes("rate_limit_exceeded")) {
-          console.log(`Rate limit hit for ${baseName}. Leaving as pending.`);
+        // Έλεγχος για προσωρινά σφάλματα (rate limits, σφάλματα server)
+        // Αν το σφάλμα είναι τέτοιου τύπου, το αφήνουμε ως 'pending' για να ξαναπροσπαθήσει.
+        const isTransientError = e.message.includes("rate_limit_exceeded") || 
+                                 e.message.includes("502") || 
+                                 e.message.includes("Bad gateway") ||
+                                 e.message.includes("500") ||
+                                 e.message.includes("503") ||
+                                 e.message.includes("504");
+
+        if (isTransientError) {
+          console.log(`Transient error for ${baseName}. Leaving as pending for retry.`);
         } else {
+          // Αυτό είναι ένα πιο μόνιμο σφάλμα (π.χ. λάθος API key, κακό prompt)
           await supabaseAdmin.from("image_processing_queue").update({ status: 'error' }).in('id', idsToUpdate);
         }
       }
