@@ -23,13 +23,14 @@ export interface CardItem {
   createdAt: string; // ISO string
 }
 
-export interface Filters {
+export type Filters = {
   query: string;
   status: 'All' | CardStatus;
-  platforms: Partial<PlatformFlags> & { onlyChecked: boolean };
+  platforms: Partial<PlatformFlags> & { onlyChecked?: boolean };
   kind?: 'All' | 'Single' | 'Lot';
   team?: 'All' | string;
-}
+  numbering?: 'All' | string;
+};
 
 export type JsonExport = {
   version: 1;

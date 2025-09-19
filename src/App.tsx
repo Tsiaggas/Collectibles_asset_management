@@ -22,8 +22,10 @@ export const App: React.FC = () => {
     platforms: { onlyChecked: false },
     kind: 'All',
     team: 'All',
+    numbering: 'All',
   });
   const [teamOptions, setTeamOptions] = useState<string[]>([]);
+  const [numberingOptions, setNumberingOptions] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState('');
   // Bulk images & AI removed for simplicity
@@ -64,6 +66,9 @@ export const App: React.FC = () => {
       if (filters.team && filters.team !== 'All') {
         if ((it.team ?? '').toLowerCase() !== filters.team.toLowerCase()) return false;
       }
+      if (filters.numbering && filters.numbering !== 'All') {
+        if (it.numbering !== filters.numbering) return false;
+      }
       if (filters.platforms.onlyChecked) {
         const pf = filters.platforms;
         if (pf.vinted && !it.platforms.vinted) return false;
@@ -80,6 +85,12 @@ export const App: React.FC = () => {
   useEffect(() => {
     const teams = Array.from(new Set(items.map((i) => (i.team || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
     setTeamOptions(teams);
+  }, [items]);
+
+  // derive numbering options from data
+  useEffect(() => {
+    const numberings = Array.from(new Set(items.map((i) => (i.numbering || '').trim()).filter(Boolean))).sort();
+    setNumberingOptions(numberings);
   }, [items]);
 
   async function addItem(newItem: Omit<CardItem, 'id' | 'createdAt'>) {
@@ -264,18 +275,6 @@ export const App: React.FC = () => {
 
   // Drive functions removed
 
-  const [form, setForm] = useState<Omit<CardItem, 'id' | 'createdAt'>>({
-    title: '',
-    team: '',
-    set: '',
-    condition: '',
-    price: undefined,
-    platforms: { vinted: false, vendora: false, ebay: false },
-    status: 'Available',
-    imageUrl: '',
-    notes: '',
-  });
-
   const statusOptions: CardStatus[] = ['New', 'Available', 'Listed', 'Inactive', 'Sold'];
 
   return (
@@ -319,6 +318,12 @@ export const App: React.FC = () => {
             <option key={t} value={t}>{t}</option>
           ))}
         </Select>
+        <Select value={filters.numbering} onChange={(e) => setFilters({ ...filters, numbering: e.target.value })}>
+          <option value="All">All numberings</option>
+          {numberingOptions.map((n) => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </Select>
         <div className="flex items-center gap-3">
           <label className="inline-flex items-center gap-2"><Checkbox checked={!!filters.platforms.vinted} onChange={(e) => setFilters({ ...filters, platforms: { ...filters.platforms, vinted: e.target.checked, onlyChecked: true } })}/>Vinted</label>
           <label className="inline-flex items-center gap-2"><Checkbox checked={!!filters.platforms.vendora} onChange={(e) => setFilters({ ...filters, platforms: { ...filters.platforms, vendora: e.target.checked, onlyChecked: true } })}/>Vendora</label>
@@ -326,50 +331,10 @@ export const App: React.FC = () => {
         </div>
       </section>
 
-      <section className="mb-6 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-        <h2 className="mb-3 text-base font-semibold">Προσθήκη κάρτας</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-          <Select value={form.kind ?? 'Single'} onChange={(e) => setForm({ ...form, kind: e.target.value as any })}>
-            <option value="Single">Single</option>
-            <option value="Lot">Lot</option>
-          </Select>
-          <TextInput placeholder="Title*" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-          <TextInput placeholder="Team (π.χ. Wolfsburg)" value={form.team} onChange={(e) => setForm({ ...form, team: e.target.value })} />
-          <TextInput placeholder="Set" value={form.set} onChange={(e) => setForm({ ...form, set: e.target.value })} />
-          <TextInput placeholder="Condition" value={form.condition} onChange={(e) => setForm({ ...form, condition: e.target.value })} />
-          <TextInput placeholder="Price" type="number" inputMode="decimal" value={form.price ?? ''} onChange={(e) => setForm({ ...form, price: e.target.value ? Number(e.target.value) : undefined })} />
-          <div className="flex items-center gap-3">
-            <label className="inline-flex items-center gap-2"><Checkbox checked={form.platforms.vinted} onChange={(e) => setForm({ ...form, platforms: { ...form.platforms, vinted: e.target.checked } })}/>Vinted</label>
-            <label className="inline-flex items-center gap-2"><Checkbox checked={form.platforms.vendora} onChange={(e) => setForm({ ...form, platforms: { ...form.platforms, vendora: e.target.checked } })}/>Vendora</label>
-            <label className="inline-flex items-center gap-2"><Checkbox checked={form.platforms.ebay} onChange={(e) => setForm({ ...form, platforms: { ...form.platforms, ebay: e.target.checked } })}/>eBay</label>
-          </div>
-          <Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as CardStatus })}>
-            {statusOptions.map((s) => (<option key={s} value={s}>{s}</option>))}
-          </Select>
-          {/* Αφαίρεση των πεδίων για URL, προστίθενται αυτόματα */}
-          <TextInput placeholder="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-          <div>
-            <button className="btn btn-primary w-full" onClick={() => {
-              if (!form.title.trim()) { setToast('Συμπλήρωσε title'); return; }
-              addItem({
-                kind: (form.kind as any) ?? 'Single',
-                title: form.title.trim(),
-                team: form.team?.trim() || undefined,
-                set: form.set?.trim() || undefined,
-                condition: form.condition?.trim() || undefined,
-                price: form.price,
-                platforms: form.platforms,
-                status: form.status,
-                notes: form.notes?.trim() || undefined,
-              });
-              setForm({ title: '', team: '', set: '', condition: '', price: undefined, platforms: { vinted: false, vendora: false, ebay: false }, status: 'Available', notes: '', kind: 'Single' } as any);
-            }}>Προσθήκη</button>
-          </div>
-        </div>
-      </section>
+      {/* Η φόρμα "Προσθήκη κάρτας" έχει αφαιρεθεί */}
 
       {filtered.length === 0 ? (
-        <div className="text-center text-gray-500">Δεν υπάρχουν κάρτες. Πρόσθεσε μία ή κάνε import.</div>
+        <div className="text-center text-gray-500">Δεν υπάρχουν κάρτες. Κάνε import ή ανέβασε μια εικόνα.</div>
       ) : (
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((it) => (
