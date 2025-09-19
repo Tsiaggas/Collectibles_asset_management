@@ -5,7 +5,7 @@ import { parseBulk, toCardItems } from './lib/parse';
 import { hasSupabase, supabase, rowToItem, itemToInsert, itemToUpdate } from './lib/supabase';
 // Drive integration removed for simplicity per user request
 import { Modal } from './components/Modal';
-import { Toast } from './components/Toast';
+import { Toast, ToastData } from './components/Toast';
 import { Checkbox, Select, TextArea, TextInput } from './components/Inputs';
 import { ImageUploader } from './components/ImageUploader';
 
@@ -32,7 +32,7 @@ export const App: React.FC = () => {
   const [bulkText, setBulkText] = useState('');
   // Bulk images & AI removed for simplicity
   const [edit, setEdit] = useState<EditState>({ open: false });
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastData | null>(null);
   // Drive state removed
 
   // Φόρτωση αποκλειστικά από Supabase
@@ -40,7 +40,7 @@ export const App: React.FC = () => {
     (async () => {
       if (!hasSupabase) {
         setItems([]);
-        setToast('Δεν έχει ρυθμιστεί Supabase (VITE_SUPABASE_URL/ANON_KEY)');
+        setToast({ message: 'Δεν έχει ρυθμιστεί Supabase (VITE_SUPABASE_URL/ANON_KEY)', type: 'error' });
         return;
       }
       const { data, error } = await supabase
@@ -48,7 +48,7 @@ export const App: React.FC = () => {
         .select('*')
         .order('created_at', { ascending: false });
       if (error) {
-        setToast('Σφάλμα φόρτωσης από Supabase');
+        setToast({ message: 'Σφάλμα φόρτωσης από Supabase', type: 'error' });
         setItems([]);
         return;
       }
@@ -96,7 +96,7 @@ export const App: React.FC = () => {
   }, [items]);
 
   async function addItem(newItem: Omit<CardItem, 'id' | 'createdAt'>) {
-    if (!hasSupabase) { setToast('Supabase δεν έχει ρυθμιστεί'); return; }
+    if (!hasSupabase) { setToast({ message: 'Supabase δεν έχει ρυθμιστεί', type: 'error' }); return; }
     // Upsert με μοναδικότητα στο title_norm (server-side dedupe)
     const { data, error } = await supabase
       .from('cards')
@@ -116,21 +116,21 @@ export const App: React.FC = () => {
           setItems((prev) => [ ...(data2 ?? []).map(rowToItem as any), ...prev ]);
           return;
         }
-        setToast('Υπάρχει ήδη κάρτα με αυτόν τον τίτλο — έγινε skip');
+        setToast({ message: 'Υπάρχει ήδη κάρτα με αυτόν τον τίτλο — έγινε skip', type: 'info' });
         return;
       }
-      setToast('Αποτυχία προσθήκης στη Supabase');
+      setToast({ message: 'Αποτυχία προσθήκης στη Supabase', type: 'error' });
       return;
     }
     if ((data?.length ?? 0) === 0) {
-      setToast('Υπάρχει ήδη κάρτα με αυτόν τον τίτλο — έγινε skip');
+      setToast({ message: 'Υπάρχει ήδη κάρτα με αυτόν τον τίτλο — έγινε skip', type: 'info' });
       return;
     }
     setItems((prev) => [ ...(data ?? []).map(rowToItem), ...prev ]);
   }
 
   async function updateItem(updated: CardItem) {
-    if (!hasSupabase) { setToast('Supabase δεν έχει ρυθμιστεί'); return; }
+    if (!hasSupabase) { setToast({ message: 'Supabase δεν έχει ρυθμιστεί', type: 'error' }); return; }
     let { error } = await supabase.from('cards').update(itemToUpdate(updated)).eq('id', updated.id);
     if (error) {
       const minimal: any = itemToUpdate(updated);
@@ -138,16 +138,16 @@ export const App: React.FC = () => {
       delete minimal.team;
       const { error: error2 } = await supabase.from('cards').update(minimal).eq('id', updated.id);
       if (error2) {
-        setToast('Αποτυχία ενημέρωσης στη Supabase');
+        setToast({ message: 'Αποτυχία ενημέρωσης στη Supabase', type: 'error' });
       }
     }
     setItems((prev) => prev.map((it) => (it.id === updated.id ? updated : it)));
   }
 
   async function deleteItem(id: string) {
-    if (!hasSupabase) { setToast('Supabase δεν έχει ρυθμιστεί'); return; }
+    if (!hasSupabase) { setToast({ message: 'Supabase δεν έχει ρυθμιστεί', type: 'error' }); return; }
     const { error } = await supabase.from('cards').delete().eq('id', id);
-    if (error) { setToast('Αποτυχία διαγραφής στη Supabase'); return; }
+    if (error) { setToast({ message: 'Αποτυχία διαγραφής στη Supabase', type: 'error' }); return; }
     setItems((prev) => prev.filter((it) => it.id !== id));
   }
 
@@ -187,13 +187,13 @@ export const App: React.FC = () => {
   }
 
   function importJson(file: File) {
-    if (!hasSupabase) { setToast('Supabase δεν έχει ρυθμιστεί'); return; }
+    if (!hasSupabase) { setToast({ message: 'Supabase δεν έχει ρυθμιστεί', type: 'error' }); return; }
     const reader = new FileReader();
     reader.onload = async () => {
       try {
         const parsed = JSON.parse(String(reader.result));
         const list: any[] = Array.isArray(parsed?.items) ? parsed.items : (Array.isArray(parsed) ? parsed : []);
-        if (!Array.isArray(list) || list.length === 0) { setToast('Το JSON δεν περιέχει items'); return; }
+        if (!Array.isArray(list) || list.length === 0) { setToast({ message: 'Το JSON δεν περιέχει items', type: 'error' }); return; }
         // Skip διπλότυπα ως προς title (υπάρχοντα και εντός JSON)
         const normalize = (s: string) => (s || '').trim().toLowerCase();
         const existingTitles = new Set(items.map((it) => normalize(it.title)));
@@ -206,7 +206,7 @@ export const App: React.FC = () => {
           seenInBatch.add(t);
           return true;
         });
-        if (filteredList.length === 0) { setToast('Όλα τα JSON items ήταν διπλότυπα τίτλου — δεν έγινε εισαγωγή'); return; }
+        if (filteredList.length === 0) { setToast({ message: 'Όλα τα JSON items ήταν διπλότυπα τίτλου — δεν έγινε εισαγωγή', type: 'info' }); return; }
         const skipped = list.length - filteredList.length;
         const toInsert = filteredList.map((i) => itemToInsert({
           kind: i.kind ?? 'Single',
@@ -224,24 +224,24 @@ export const App: React.FC = () => {
           .from('cards')
           .upsert(toInsert, { onConflict: 'title_norm', ignoreDuplicates: true })
           .select('*');
-        if (error) { setToast('Σφάλμα κατά το import στη Supabase'); return; }
+        if (error) { setToast({ message: 'Σφάλμα κατά το import στη Supabase', type: 'error' }); return; }
         setItems((prev) => [ ...(data ?? []).map(rowToItem), ...prev ]);
         const skippedByDb = toInsert.length - (data?.length ?? 0);
         const totalSkipped = skippedByDb + skipped;
-        setToast(`Import ολοκληρώθηκε (${data?.length ?? 0})${totalSkipped > 0 ? ` (skip ${totalSkipped} διπλότυπα)` : ''}`);
+        setToast({ message: `Import ολοκληρώθηκε (${data?.length ?? 0})${totalSkipped > 0 ? ` (skip ${totalSkipped} διπλότυπα)` : ''}`, type: 'success' });
       } catch {
-        setToast('Σφάλμα στο import JSON');
+        setToast({ message: 'Σφάλμα στο import JSON', type: 'error' });
       }
     };
     reader.readAsText(file);
   }
 
   async function doBulkImport() {
-    if (!hasSupabase) { setToast('Supabase δεν έχει ρυθμιστεί'); return; }
+    if (!hasSupabase) { setToast({ message: 'Supabase δεν έχει ρυθμιστεί', type: 'error' }); return; }
     const rows = parseBulk(bulkText);
     const newItems = toCardItems(rows);
     if (newItems.length === 0) {
-      setToast('Δεν βρέθηκαν έγκυρες γραμμές');
+      setToast({ message: 'Δεν βρέθηκαν έγκυρες γραμμές', type: 'info' });
       return;
     }
     // Skip διπλότυπα με βάση τον τίτλο (σε σχέση με υπάρχοντα και εντός του ίδιου import)
@@ -257,7 +257,7 @@ export const App: React.FC = () => {
       return true;
     });
     if (uniqueNewItems.length === 0) {
-      setToast('Όλες οι γραμμές ήταν διπλότυπες τίτλου — δεν έγινε εισαγωγή');
+      setToast({ message: 'Όλες οι γραμμές ήταν διπλότυπες τίτλου — δεν έγινε εισαγωγή', type: 'info' });
       return;
     }
     const skipped = newItems.length - uniqueNewItems.length;
@@ -266,18 +266,29 @@ export const App: React.FC = () => {
       .from('cards')
       .upsert(payload, { onConflict: 'title_norm', ignoreDuplicates: true })
       .select('*');
-    if (error) { setToast('Σφάλμα import στη Supabase'); return; }
+    if (error) { setToast({ message: 'Σφάλμα import στη Supabase', type: 'error' }); return; }
     setItems((prev) => [ ...(data ?? []).map(rowToItem), ...prev ]);
     setBulkText('');
     setBulkOpen(false);
     const skippedByDb = payload.length - (data?.length ?? 0);
     const totalSkipped = skipped + skippedByDb;
-    setToast(`Έγινε import ${data?.length ?? 0} καρτών${totalSkipped > 0 ? ` (skip ${totalSkipped} διπλότυπα)` : ''}`);
+    setToast({ message: `Έγινε import ${data?.length ?? 0} καρτών${totalSkipped > 0 ? ` (skip ${totalSkipped} διπλότυπα)` : ''}`, type: 'success' });
   }
 
   // Drive functions removed
 
   const statusOptions: CardStatus[] = ['New', 'Available', 'Listed', 'Inactive', 'Sold'];
+
+  const handleCheckPrice = (title: string) => {
+    if (!title) return;
+    navigator.clipboard.writeText(title).then(() => {
+      setToast({ message: 'Card title copied to clipboard!', type: 'success' });
+      window.open('https://130point.com/sales/', '_blank');
+    }).catch(err => {
+      console.error('Failed to copy text: ', err);
+      setToast({ message: 'Failed to copy title.', type: 'error' });
+    });
+  };
 
   return (
     <div className="mx-auto max-w-6xl p-4">
@@ -367,10 +378,8 @@ export const App: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <button className="btn" onClick={() => setEdit({ open: true, item: it })}>Edit</button>
                   <button className="btn" onClick={() => updateItem({ ...it, status: nextStatus(it.status) })}>Next status</button>
-                  <a
-                    href={`https://130point.com/sales/?search_text=${encodeURIComponent(it.title || '')}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    onClick={() => handleCheckPrice(it.title || '')}
                     className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded transition-colors inline-flex items-center"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
@@ -378,7 +387,7 @@ export const App: React.FC = () => {
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a.5.5 0 00-1 0v.092a4.5 4.5 0 00-1.897 1.158l-.21.192a.5.5 0 00.638.764l.21-.192a3.5 3.5 0 011.26-1.022V7.5a.5.5 0 001 0V5z" clipRule="evenodd" />
                     </svg>
                     Check Price
-                  </a>
+                  </button>
                   <button className="btn" onClick={() => deleteItem(it.id)}>Delete</button>
                 </div>
                 <div className="text-xs text-gray-500">{new Date(it.createdAt).toLocaleString()}</div>
@@ -481,7 +490,7 @@ Single\tGengar\tFossil\tLP\t39.9\tyes\ttrue\t0\tInactive\t\tshadow`}
         )}
       </Modal>
 
-      {toast && <Toast message={toast} onDone={() => setToast(null)} />}
+      <Toast toast={toast} setToast={setToast} />
 
       <footer className="mt-10 text-xs text-gray-500">
         {hasSupabase ? 'Δεδομένα αποθηκεύονται στο Supabase.' : 'Ρύθμισε VITE_SUPABASE_URL και VITE_SUPABASE_ANON_KEY για αποθήκευση στο Supabase.'}
