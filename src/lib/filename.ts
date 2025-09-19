@@ -57,8 +57,8 @@ export function parseFromFilename(filename: string): ParsedFromFilename {
   const base = filename.replace(/\.[^.]+$/i, '');
   // normalize separators to spaces
   let text = base.replace(/[._\-\|]+/g, ' ');
-  // keep bracketed parts as hints for set
-  const bracketMatch = text.match(/[\[(]([^\])\)]/);
+  // keep bracketed parts as hints for set (match [ ... ] ή ( ... ))
+  const bracketMatch = text.match(/[\[(]([^)\]]+)[\])]/);
   if (bracketMatch && bracketMatch[1]) {
     const candidate = cleanWord(bracketMatch[1]);
     if (candidate) result.set = candidate;

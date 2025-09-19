@@ -84,34 +84,36 @@ export const App: React.FC = () => {
 
   async function addItem(newItem: Omit<CardItem, 'id' | 'createdAt'>) {
     if (!hasSupabase) { setToast('Supabase δεν έχει ρυθμιστεί'); return; }
-    // Skip διπλότυπο τίτλο (σε σχέση με τα ήδη φορτωμένα στοιχεία)
-    const normalize = (s: string) => s.trim().toLowerCase();
-    const exists = items.some((i) => normalize(i.title) === normalize(newItem.title));
-    if (exists) { setToast('Υπάρχει ήδη κάρτα με αυτόν τον τίτλο — έγινε skip'); return; }
-    // 1st try με πλήρες schema
+    // Upsert με μοναδικότητα στο title_norm (server-side dedupe)
     const { data, error } = await supabase
       .from('cards')
-      .insert(itemToInsert(newItem))
-      .select('*')
-      .single();
-    if (!error && data) {
-      setItems((prev) => [rowToItem(data), ...prev]);
+      .upsert(itemToInsert(newItem), { onConflict: 'title_norm', ignoreDuplicates: true })
+      .select('*');
+    if (error) {
+      // Fallback για παλιό schema χωρίς kind/team
+      const minimal: any = itemToInsert(newItem);
+      delete minimal.kind;
+      delete minimal.team;
+      const { data: data2, error: error2 } = await supabase
+        .from('cards')
+        .upsert(minimal, { onConflict: 'title_norm', ignoreDuplicates: true })
+        .select('*');
+      if (!error2) {
+        if ((data2?.length ?? 0) > 0) {
+          setItems((prev) => [ ...(data2 ?? []).map(rowToItem as any), ...prev ]);
+          return;
+        }
+        setToast('Υπάρχει ήδη κάρτα με αυτόν τον τίτλο — έγινε skip');
+        return;
+      }
+      setToast('Αποτυχία προσθήκης στη Supabase');
       return;
     }
-    // Fallback για παλιό schema χωρίς kind/team
-    const minimal: any = itemToInsert(newItem);
-    delete minimal.kind;
-    delete minimal.team;
-    const { data: data2, error: error2 } = await supabase
-      .from('cards')
-      .insert(minimal)
-      .select('*')
-      .single();
-    if (!error2 && data2) {
-      setItems((prev) => [rowToItem(data2 as any), ...prev]);
+    if ((data?.length ?? 0) === 0) {
+      setToast('Υπάρχει ήδη κάρτα με αυτόν τον τίτλο — έγινε skip');
       return;
     }
-    setToast('Αποτυχία προσθήκης στη Supabase');
+    setItems((prev) => [ ...(data ?? []).map(rowToItem), ...prev ]);
   }
 
   async function updateItem(updated: CardItem) {
@@ -148,10 +150,7 @@ export const App: React.FC = () => {
   }
 
   async function exportExcel() {
-    const [{ utils, writeFile }, { saveAs }] = await Promise.all([
-      import('xlsx'),
-      import('file-saver') as any,
-    ]);
+    const { utils, writeFile } = await import('xlsx');
     const rows = items.map((it) => ({
       id: it.id,
       kind: it.kind ?? 'Single',
@@ -208,10 +207,15 @@ export const App: React.FC = () => {
           imageUrl: i.imageUrl ?? undefined,
           notes: i.notes ?? undefined,
         }));
-        const { data, error } = await supabase.from('cards').insert(toInsert).select('*');
+        const { data, error } = await supabase
+          .from('cards')
+          .upsert(toInsert, { onConflict: 'title_norm', ignoreDuplicates: true })
+          .select('*');
         if (error) { setToast('Σφάλμα κατά το import στη Supabase'); return; }
         setItems((prev) => [ ...(data ?? []).map(rowToItem), ...prev ]);
-        setToast(`Import ολοκληρώθηκε (${data?.length ?? 0})${skipped > 0 ? ` (skip ${skipped} διπλότυπα)` : ''}`);
+        const skippedByDb = toInsert.length - (data?.length ?? 0);
+        const totalSkipped = skippedByDb + skipped;
+        setToast(`Import ολοκληρώθηκε (${data?.length ?? 0})${totalSkipped > 0 ? ` (skip ${totalSkipped} διπλότυπα)` : ''}`);
       } catch {
         setToast('Σφάλμα στο import JSON');
       }
@@ -245,12 +249,17 @@ export const App: React.FC = () => {
     }
     const skipped = newItems.length - uniqueNewItems.length;
     const payload = uniqueNewItems.map((ni) => itemToInsert(ni));
-    const { data, error } = await supabase.from('cards').insert(payload).select('*');
+    const { data, error } = await supabase
+      .from('cards')
+      .upsert(payload, { onConflict: 'title_norm', ignoreDuplicates: true })
+      .select('*');
     if (error) { setToast('Σφάλμα import στη Supabase'); return; }
     setItems((prev) => [ ...(data ?? []).map(rowToItem), ...prev ]);
     setBulkText('');
     setBulkOpen(false);
-    setToast(`Έγινε import ${data?.length ?? 0} καρτών${skipped > 0 ? ` (skip ${skipped} διπλότυπα)` : ''}`);
+    const skippedByDb = payload.length - (data?.length ?? 0);
+    const totalSkipped = skipped + skippedByDb;
+    setToast(`Έγινε import ${data?.length ?? 0} καρτών${totalSkipped > 0 ? ` (skip ${totalSkipped} διπλότυπα)` : ''}`);
   }
 
   // Drive functions removed

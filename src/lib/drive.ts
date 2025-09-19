@@ -14,10 +14,11 @@ type TokenResponse = {
 let cachedToken: string | null = null;
 let tokenExpiresAt = 0;
 
+declare const google: any;
+
 export async function getAccessTokenInteractive(): Promise<string> {
   if (cachedToken && Date.now() < tokenExpiresAt - 30_000) return cachedToken;
 
-  // @ts-expect-error GIS global
   const tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
     scope: 'https://www.googleapis.com/auth/drive.file',
@@ -26,7 +27,6 @@ export async function getAccessTokenInteractive(): Promise<string> {
       tokenExpiresAt = Date.now() + resp.expires_in * 1000;
     },
   });
-  // @ts-expect-error requestAccessToken exists
   tokenClient.requestAccessToken({ prompt: 'consent' });
 
   await new Promise((r) => setTimeout(r, 300));
