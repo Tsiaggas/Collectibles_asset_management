@@ -2,11 +2,11 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode } from "https://deno.land/std@0.177.0/encoding/base64.ts";
 
-// <<-- ΑΝΑΒΑΘΜΙΣΜΕΝΟ PROMPT v3 -->>
+// <<-- ΑΝΑΒΑΘΜΙΣΜΕΝΟ PROMPT v4 -->>
 const OAI_PROMPT = `
 You are an expert trading card identifier, preparing structured data for an asset management tool.
 From the provided images, extract the card's details precisely.
-Your response MUST be in JSON format.
+Your response MUST be in JSON format. Prioritize the 'front' image for primary details.
 
 **JSON Schema & Instructions:**
 
@@ -23,8 +23,13 @@ Your response MUST be in JSON format.
 - **team**: (string) The player's team. IMPORTANT: Be consistent. For Bayern, always return "FC Bayern Munich".
 - **kind**: (string) "Single" or "Lot".
 - **numbering**: (string) The card's serial number suffix (e.g., "/25", "/49", "/99"). If the card is NOT numbered, use the string "base".
-- **notes**: (string) A **concise description in ENGLISH**. Mention key features like player, team, set, and any special characteristics (e.g., "Autographed card", "Numbered to 99", "Refractor parallel").
-  - Example: "Serge Gnabry autograph card from 2023-2024 Topps Museum Collection. Numbered /99. A great collectible for any Bayern Munich fan."
+- **notes**: (string) A **concise description in ENGLISH**. 
+  - For **Single cards**, mention key features like player, team, set, and any special characteristics (e.g., "Autographed card", "Numbered to 99", "Refractor parallel").
+  - For **Lots**, summarize the content (e.g., "Lot of 3 cards from VfL Wolfsburg, including a numbered Maxence Lacroix autograph.").
+
+**Examples:**
+- **Single Card Notes:** "Serge Gnabry autograph card from 2023-2024 Topps Museum Collection. Numbered /99. A great collectible for any Bayern Munich fan."
+- **Lot Notes:** "Lot of 3 VfL Wolfsburg cards from Topps Chrome. Features a numbered Konstantinos Koulierakis /25 and a Maxence Lacroix autograph. Excellent for team collectors."
 `;
 
 // Helper για "καθαρισμό" ονομάτων ομάδων
@@ -135,12 +140,17 @@ serve(async (_req) => {
       Deno.env.get("SERVICE_ROLE_KEY")!
     );
 
-    // 1. Παίρνουμε τα "pending" αρχεία από την ουρά
+    // <<-- ΝΕΑ ΛΟΓΙΚΗ: "ΠΕΡΙΟΔΟΣ ΧΑΡΙΤΟΣ" 60 ΔΕΥΤΕΡΟΛΕΠΤΩΝ -->>
+    // Ορίζουμε το χρονικό όριο: επεξεργαζόμαστε μόνο ό,τι ανέβηκε πριν από 60 δευτερόλεπτα.
+    const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
+
+    // 1. Παίρνουμε τα "pending" αρχεία από την ουρά που είναι αρκετά "παλιά"
     const { data: queueItems, error: queueError } = await supabaseAdmin
       .from("image_processing_queue")
       .select("*")
       .eq("status", "pending")
-      .limit(3); // <<-- ΤΕΛΙΚΗ ΡΥΘΜΙΣΗ: Μόνο 3 αρχεία τη φορά για να είμαστε κάτω από το όριο της OpenAI
+      .lt("created_at", sixtySecondsAgo) // <-- Το κλειδί της νέας λογικής
+      .limit(10); // Αυξάνουμε λίγο το όριο, αφού οι ομάδες θα είναι πιο σωστές
 
     if (queueError) throw queueError;
     if (!queueItems || queueItems.length === 0) {
@@ -194,6 +204,7 @@ serve(async (_req) => {
           kind: aiResult.kind || (/lot/i.test(baseName) ? 'Lot' : 'Single'),
           status: 'New',
           numbering: aiResult.numbering, // <-- Προσθήκη του νέου πεδίου
+          // <<-- ΒΕΛΤΙΩΜΕΝΗ ΑΝΤΙΣΤΟΙΧΙΣΗ ΕΙΚΟΝΩΝ -->>
           image_url_front: imageUrls.find(u => u.type === 'front')?.url || imageUrls.find(u => u.type === 'lot')?.url || imageUrls[0]?.url,
           image_url_back: imageUrls.find(u => u.type === 'back')?.url
         };
