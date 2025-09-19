@@ -140,17 +140,14 @@ serve(async (_req) => {
       Deno.env.get("SERVICE_ROLE_KEY")!
     );
 
-    // <<-- ΝΕΑ ΛΟΓΙΚΗ: "ΠΕΡΙΟΔΟΣ ΧΑΡΙΤΟΣ" 60 ΔΕΥΤΕΡΟΛΕΠΤΩΝ -->>
-    // Ορίζουμε το χρονικό όριο: επεξεργαζόμαστε μόνο ό,τι ανέβηκε πριν από 60 δευτερόλεπτα.
-    const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
-
-    // 1. Παίρνουμε τα "pending" αρχεία από την ουρά που είναι αρκετά "παλιά"
+    // <<-- ΝΕΑ ΛΟΓΙΚΗ: STAGING AREA -->>
+    // 1. Παίρνουμε ΟΛΑ τα "pending" αρχεία που έχει "προάγει" ο νέος Cron Job.
+    // Η λογική της αναμονής έχει μεταφερθεί ΕΚΤΟΣ της function, κάνοντάς την πιο αξιόπιστη.
     const { data: queueItems, error: queueError } = await supabaseAdmin
       .from("image_processing_queue")
       .select("*")
-      .eq("status", "pending")
-      .lt("created_at", sixtySecondsAgo) // <-- Το κλειδί της νέας λογικής
-      .limit(10); // Αυξάνουμε λίγο το όριο, αφού οι ομάδες θα είναι πιο σωστές
+      .eq("status", "pending") // <-- Παίρνουμε μόνο όσα είναι έτοιμα για επεξεργασία
+      .limit(50); // Μπορούμε να έχουμε ένα μεγαλύτερο όριο τώρα
 
     if (queueError) throw queueError;
     if (!queueItems || queueItems.length === 0) {
@@ -180,9 +177,6 @@ serve(async (_req) => {
         // <<-- ΑΛΛΑΓΗ: Καλούμε την callOpenAI με τα items και τον supabaseAdmin
         const aiResult = await callOpenAI(items, supabaseAdmin);
 
-        // <<-- ΝΕΟ: Εφαρμόζουμε τον "καθαριστή" στο όνομα της ομάδας
-        const normalizedTeam = normalizeTeamName(aiResult.team);
-
         // (Τα public URLs τα χρειαζόμαστε ακόμα για να τα αποθηκεύσουμε στη βάση)
         const imageUrls: { url: string, type: 'front' | 'back' | 'lot' }[] = items.map(item => {
           const url = `${Deno.env.get("PROJECT_URL")}/storage/v1/object/public/${item.bucket_id}/${item.object_name}`;
@@ -195,6 +189,18 @@ serve(async (_req) => {
         // Βρίσκουμε το πραγματικό όνομα αρχείου για το lot, αν υπάρχει
         const lotItemName = items.find(item => /lot/i.test(item.object_name))?.object_name;
         
+        const normalizedTeam = normalizeTeamName(aiResult.team);
+
+        // <<-- ΔΙΟΡΘΩΣΗ BUG ΣΤΗΝ ΑΝΑΘΕΣΗ ΕΙΚΟΝΩΝ -->>
+        const frontUrl = imageUrls.find(u => u.type === 'front')?.url;
+        const backUrl = imageUrls.find(u => u.type === 'back')?.url;
+        const lotUrl = imageUrls.find(u => u.type === 'lot')?.url;
+        
+        // Βρίσκει μια κύρια εικόνα. Προτεραιότητα: front, μετά lot.
+        // Αν δεν υπάρχουν, παίρνει την πρώτη εικόνα του group ΠΟΥ ΔΕΝ ΕΙΝΑΙ 'back'.
+        // Ως έσχατη λύση (αν υπάρχει μόνο 'back' εικόνα), παίρνει την πρώτη που θα βρει.
+        const primaryImageUrl = frontUrl || lotUrl || imageUrls.find(u => u.type !== 'back')?.url || imageUrls[0]?.url;
+
         const upsertData = {
           title: aiResult.title || (lotItemName ? lotItemName.split('/').pop()!.replace(/\.[^/.]+$/, "") : baseName),
           set: aiResult.set,
@@ -205,8 +211,8 @@ serve(async (_req) => {
           status: 'New',
           numbering: aiResult.numbering, // <-- Προσθήκη του νέου πεδίου
           // <<-- ΒΕΛΤΙΩΜΕΝΗ ΑΝΤΙΣΤΟΙΧΙΣΗ ΕΙΚΟΝΩΝ -->>
-          image_url_front: imageUrls.find(u => u.type === 'front')?.url || imageUrls.find(u => u.type === 'lot')?.url || imageUrls[0]?.url,
-          image_url_back: imageUrls.find(u => u.type === 'back')?.url
+          image_url_front: primaryImageUrl,
+          image_url_back: backUrl,
         };
         
         // Χρησιμοποιούμε την upsert_card function που είχαμε φτιάξει!
