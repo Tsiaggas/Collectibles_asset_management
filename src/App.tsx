@@ -367,6 +367,18 @@ export const App: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <button className="btn" onClick={() => setEdit({ open: true, item: it })}>Edit</button>
                   <button className="btn" onClick={() => updateItem({ ...it, status: nextStatus(it.status) })}>Next status</button>
+                  <a
+                    href={`https://130point.com/sales/?q=${encodeURIComponent(it.title || '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded transition-colors inline-flex items-center"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M8.433 7.418c.158-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-.567-.267C8.07 8.34 8 8.444 8 8.5v3a.5.5 0 00.5.5h1a.5.5 0 00.5-.5v-3a.5.5 0 00-.433-.482z" />
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a.5.5 0 00-1 0v.092a4.5 4.5 0 00-1.897 1.158l-.21.192a.5.5 0 00.638.764l.21-.192a3.5 3.5 0 011.26-1.022V7.5a.5.5 0 001 0V5z" clipRule="evenodd" />
+                    </svg>
+                    Check Price
+                  </a>
                   <button className="btn" onClick={() => deleteItem(it.id)}>Delete</button>
                 </div>
                 <div className="text-xs text-gray-500">{new Date(it.createdAt).toLocaleString()}</div>
