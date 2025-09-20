@@ -173,7 +173,7 @@ export const ImageUploader = ({ onComplete }: { onComplete: () => void }) => {
                   className={`p-3 rounded-lg border ${snapshot.isDraggingOver ? 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-500' : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'}`}
                 >
                   <div className="font-bold mb-2 capitalize text-indigo-800 dark:text-indigo-300">Group: {group.name}</div>
-                  <div className="space-y-2">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                     {group.files.map((f, i) => (
                       <Draggable key={f.id} draggableId={f.id} index={i}>
                         {(provided, snapshot) => (
@@ -181,23 +181,23 @@ export const ImageUploader = ({ onComplete }: { onComplete: () => void }) => {
                            ref={provided.innerRef}
                            {...provided.draggableProps}
                            {...provided.dragHandleProps}
-                           className={`flex items-center gap-3 p-2 rounded-md ${snapshot.isDragging ? 'bg-white dark:bg-gray-700 shadow-lg' : 'bg-white/50 dark:bg-gray-900/50'}`}
+                           className={`p-2 rounded-lg flex flex-col gap-2 ${snapshot.isDragging ? 'bg-white dark:bg-gray-700 shadow-2xl' : 'bg-white/50 dark:bg-gray-900/50'}`}
                          >
-                            <div className="flex-shrink-0 w-12 h-12">
-                              <img src={URL.createObjectURL(f.file)} alt={f.file.name} className="w-full h-full object-cover rounded" />
+                            <div className="aspect-square w-full flex-shrink-0">
+                              <img src={URL.createObjectURL(f.file)} alt={f.file.name} className="w-full h-full object-cover rounded-md" />
                             </div>
                             <div className="flex-grow">
-                              <div className="text-sm font-medium truncate">{f.file.name}</div>
-                              <div className="relative w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                              <div className="text-xs font-medium truncate" title={f.file.name}>{f.file.name}</div>
+                              <div className="relative w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-1">
                                 <div 
-                                  className={`h-2 rounded-full transition-all duration-300 ${
+                                  className={`h-1.5 rounded-full transition-all duration-300 ${
                                     f.status === 'success' ? 'bg-green-500' : 
                                     f.status === 'error' ? 'bg-red-500' : 'bg-indigo-500'
                                   }`} 
                                   style={{ width: `${f.progress}%` }}
                                 ></div>
                               </div>
-                              {f.status === 'error' && <div className="text-xs text-red-500 mt-1">{f.error}</div>}
+                              {f.status === 'error' && <div className="text-xs text-red-500 mt-1 truncate">{f.error}</div>}
                             </div>
                           </div>
                         )}
