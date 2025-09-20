@@ -1,131 +1,225 @@
 import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { supabase } from '../lib/supabase';
-import { sanitize } from '../lib/filename';
+import { v4 as uuidv4 } from 'uuid';
+import { DragDropContext, Droppable, Draggable, OnDragEndResponder } from '@hello-pangea/dnd';
 
+// Μοναδικό ID για κάθε αρχείο, απαραίτητο για το dnd
 type FileStatus = {
+  id: string;
   file: File;
   status: 'pending' | 'uploading' | 'success' | 'error';
   progress: number;
   error?: string;
 };
 
+// Νέα δομή για τα groups
+type ImageGroup = {
+  id: string; // ID του group
+  name: string; // όνομα του group (π.χ. "gittens")
+  files: FileStatus[];
+};
+
 const BUCKET_NAME = 'filacollectibles';
 const MAX_FILES = 20;
 
+// Helper function για να βρίσκει το βασικό όνομα από το αρχείο
+const getBaseName = (fileName: string) => {
+  return fileName
+    .toLowerCase()
+    .replace(/front|back|[\s_-]+1|[\s_-]+2|[\s_-]+3/gi, '') // αφαιρεί front/back/νούμερα
+    .replace(/\.[^/.]+$/, "") // αφαιρεί την κατάληξη
+    .replace(/[^a-z0-9-]/g, '-') // καθαρίζει ειδικούς χαρακτήρες
+    .trim() || 'card'; // fallback name
+};
+
 export const ImageUploader = ({ onComplete }: { onComplete: () => void }) => {
-  const [files, setFiles] = useState<FileStatus[]>([]);
+  const [groups, setGroups] = useState<ImageGroup[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (files.length + acceptedFiles.length > MAX_FILES) {
-      alert(`You can only upload a maximum of ${MAX_FILES} files at a time.`);
-      return;
-    }
-    const newFiles: FileStatus[] = acceptedFiles.map(file => ({
-      file,
-      status: 'pending',
-      progress: 0,
-    }));
-    setFiles(prev => [...prev, ...newFiles]);
-  }, [files]);
+    setGroups(prevGroups => {
+      const newGroups = [...prevGroups];
+
+      acceptedFiles.forEach(file => {
+        const baseName = getBaseName(file.name);
+        const fileStatus: FileStatus = { id: uuidv4(), file, status: 'pending', progress: 0 };
+        
+        const existingGroup = newGroups.find(g => g.name === baseName);
+        if (existingGroup) {
+          existingGroup.files.push(fileStatus);
+        } else {
+          newGroups.push({ id: uuidv4(), name: baseName, files: [fileStatus] });
+        }
+      });
+
+      return newGroups;
+    });
+  }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
     onDrop,
     accept: { 'image/*': ['.jpeg', '.jpg', '.png', '.webp'] },
   });
 
+  const onDragEnd: OnDragEndResponder = (result) => {
+    const { source, destination } = result;
+    if (!destination) return;
+
+    const sourceGroupId = source.droppableId;
+    const destGroupId = destination.droppableId;
+
+    setGroups(prev => {
+      const newGroups = JSON.parse(JSON.stringify(prev));
+      const sourceGroup = newGroups.find((g: ImageGroup) => g.id === sourceGroupId);
+      const destGroup = newGroups.find((g: ImageGroup) => g.id === destGroupId);
+      if (!sourceGroup || !destGroup) return prev;
+      
+      const [movedFile] = sourceGroup.files.splice(source.index, 1);
+      
+      if (sourceGroupId === destGroupId) {
+        // Re-ordering within the same group
+        sourceGroup.files.splice(destination.index, 0, movedFile);
+      } else {
+        // Moving to a different group
+        destGroup.files.splice(destination.index, 0, movedFile);
+      }
+
+      // Καθαρίζουμε τα κενά groups
+      return newGroups.filter((g: ImageGroup) => g.files.length > 0);
+    });
+  };
+
   const handleUpload = async () => {
     setIsUploading(true);
 
-    const uploadPromises = files.filter(f => f.status === 'pending').map(async (fileStatus, index) => {
-      const updateFileStatus = (status: Partial<FileStatus>) => {
-        setFiles(prev => {
-          const newFiles = [...prev];
-          newFiles[index] = { ...newFiles[index], ...status };
-          return newFiles;
-        });
-      };
-
-      try {
-        updateFileStatus({ status: 'uploading', progress: 0 });
-        const cleanName = sanitize(fileStatus.file.name);
+    const uploadPromises = groups.flatMap(group => {
+      // Κάθε group παίρνει ένα ΜΟΝΑΔΙΚΟ ID για το path στο storage
+      const groupUploadId = uuidv4(); 
+      
+      return group.files.map(async (fileStatus, index) => {
         
-        const { error } = await supabase.storage
-          .from(BUCKET_NAME)
-          .upload(cleanName, fileStatus.file, {
-            cacheControl: '3600',
-            upsert: false, // Μην αντικαθιστάς υπάρχοντα αρχεία
-          });
+        const updateFileStatus = (status: Partial<FileStatus>) => {
+          setGroups(prev => prev.map(g => {
+            if (g.id !== group.id) return g;
+            return {
+              ...g,
+              files: g.files.map(f => f.id === fileStatus.id ? { ...f, ...status } : f),
+            };
+          }));
+        };
 
-        if (error) {
-          throw new Error(error.message);
+        try {
+          updateFileStatus({ status: 'uploading', progress: 5 });
+
+          const file = fileStatus.file;
+          const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+          
+          let role = `${index + 1}`; // default lot numbering
+          if (/front/i.test(file.name)) role = 'front';
+          if (/back/i.test(file.name)) role = 'back';
+          
+          const newPath = `public/${groupUploadId}/${role}.${extension}`;
+
+          const { error } = await supabase.storage
+            .from(BUCKET_NAME)
+            .upload(newPath, file, {
+              cacheControl: '3600',
+              upsert: true,
+            });
+
+          if (error) throw new Error(error.message);
+          
+          updateFileStatus({ status: 'success', progress: 100 });
+        } catch (e: any) {
+          updateFileStatus({ status: 'error', error: e.message, progress: 100 });
         }
-        
-        updateFileStatus({ status: 'success', progress: 100 });
-      } catch (e: any) {
-        updateFileStatus({ status: 'error', error: e.message });
-      }
+      });
     });
 
     await Promise.all(uploadPromises);
     setIsUploading(false);
   };
-
-  const allDone = files.length > 0 && files.every(f => f.status === 'success' || f.status === 'error');
+  
+  const allFiles = groups.flatMap(g => g.files);
+  const allDone = allFiles.length > 0 && allFiles.every(f => f.status === 'success' || f.status === 'error');
 
   return (
     <div className="space-y-4">
-      <div 
-        {...getRootProps()} 
-        className={`p-10 border-2 border-dashed rounded-lg text-center cursor-pointer
-                    ${isDragActive ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'}`}
-      >
-        <input {...getInputProps()} />
-        {isDragActive ? (
-          <p>Drop the files here ...</p>
-        ) : (
-          <p>Drag 'n' drop some files here, or click to select files (max {MAX_FILES})</p>
-        )}
-      </div>
+      {!allDone && (
+         <div 
+         {...getRootProps()} 
+         className={`p-10 border-2 border-dashed rounded-lg text-center cursor-pointer
+                     ${isDragActive ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'}`}
+       >
+         <input {...getInputProps()} />
+         <p>Drag 'n' drop files here, or click to select (max {MAX_FILES})</p>
+         <p className="text-xs text-gray-500 mt-1">Files with similar names (e.g., card_front, card_back) will be grouped.</p>
+       </div>
+      )}
 
-      {files.length > 0 && (
-        <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-          {files.map((f, i) => (
-            <div key={i} className="flex items-center gap-3 p-2 rounded-md bg-gray-100 dark:bg-gray-800">
-              <div className="flex-shrink-0 w-10 h-10">
-                <img src={URL.createObjectURL(f.file)} alt={f.file.name} className="w-full h-full object-cover rounded" />
-              </div>
-              <div className="flex-grow">
-                <div className="text-sm font-medium truncate">{f.file.name}</div>
-                <div className="relative w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                  <div 
-                    className={`h-2 rounded-full ${
-                      f.status === 'success' ? 'bg-green-500' : 
-                      f.status === 'error' ? 'bg-red-500' : 'bg-indigo-500'
-                    }`} 
-                    style={{ width: `${f.progress}%` }}
-                  ></div>
+      <DragDropContext onDragEnd={onDragEnd}>
+        <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
+          {groups.map(group => (
+            <Droppable key={group.id} droppableId={group.id}>
+              {(provided, snapshot) => (
+                <div 
+                  ref={provided.innerRef} 
+                  {...provided.droppableProps}
+                  className={`p-3 rounded-lg border ${snapshot.isDraggingOver ? 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-500' : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'}`}
+                >
+                  <div className="font-bold mb-2 capitalize text-indigo-800 dark:text-indigo-300">Group: {group.name}</div>
+                  <div className="space-y-2">
+                    {group.files.map((f, i) => (
+                      <Draggable key={f.id} draggableId={f.id} index={i}>
+                        {(provided, snapshot) => (
+                           <div
+                           ref={provided.innerRef}
+                           {...provided.draggableProps}
+                           {...provided.dragHandleProps}
+                           className={`flex items-center gap-3 p-2 rounded-md ${snapshot.isDragging ? 'bg-white dark:bg-gray-700 shadow-lg' : 'bg-white/50 dark:bg-gray-900/50'}`}
+                         >
+                            <div className="flex-shrink-0 w-12 h-12">
+                              <img src={URL.createObjectURL(f.file)} alt={f.file.name} className="w-full h-full object-cover rounded" />
+                            </div>
+                            <div className="flex-grow">
+                              <div className="text-sm font-medium truncate">{f.file.name}</div>
+                              <div className="relative w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                <div 
+                                  className={`h-2 rounded-full transition-all duration-300 ${
+                                    f.status === 'success' ? 'bg-green-500' : 
+                                    f.status === 'error' ? 'bg-red-500' : 'bg-indigo-500'
+                                  }`} 
+                                  style={{ width: `${f.progress}%` }}
+                                ></div>
+                              </div>
+                              {f.status === 'error' && <div className="text-xs text-red-500 mt-1">{f.error}</div>}
+                            </div>
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </div>
                 </div>
-                {f.status === 'error' && <div className="text-xs text-red-500 mt-1">{f.error}</div>}
-              </div>
-            </div>
+              )}
+            </Droppable>
           ))}
         </div>
-      )}
+      </DragDropContext>
 
       <div className="flex gap-2 justify-end">
         {allDone ? (
           <button className="btn btn-primary" onClick={onComplete}>Close</button>
         ) : (
           <>
-            <button className="btn" onClick={() => setFiles([])} disabled={isUploading}>Clear</button>
+            <button className="btn" onClick={() => setGroups([])} disabled={isUploading}>Clear All</button>
             <button 
               className="btn btn-primary" 
               onClick={handleUpload} 
-              disabled={isUploading || files.length === 0 || files.every(f => f.status !== 'pending')}
+              disabled={isUploading || allFiles.length === 0 || allFiles.every(f => f.status !== 'pending')}
             >
-              {isUploading ? 'Uploading...' : `Upload ${files.filter(f => f.status === 'pending').length} Files`}
+              {isUploading ? 'Uploading...' : `Upload ${allFiles.filter(f => f.status === 'pending').length} Files`}
             </button>
           </>
         )}
