@@ -70,23 +70,27 @@ export const ImageUploader = ({ onComplete }: { onComplete: () => void }) => {
     const destGroupId = destination.droppableId;
 
     setGroups(prev => {
-      const newGroups = JSON.parse(JSON.stringify(prev));
-      const sourceGroup = newGroups.find((g: ImageGroup) => g.id === sourceGroupId);
-      const destGroup = newGroups.find((g: ImageGroup) => g.id === destGroupId);
-      if (!sourceGroup || !destGroup) return prev;
-      
+      const newGroups = [...prev]; // Create a mutable copy
+
+      const sourceGroupIndex = newGroups.findIndex(g => g.id === sourceGroupId);
+      const destGroupIndex = newGroups.findIndex(g => g.id === destGroupId);
+
+      if (sourceGroupIndex === -1 || destGroupIndex === -1) return prev;
+
+      const sourceGroup = newGroups[sourceGroupIndex];
       const [movedFile] = sourceGroup.files.splice(source.index, 1);
-      
+
       if (sourceGroupId === destGroupId) {
         // Re-ordering within the same group
         sourceGroup.files.splice(destination.index, 0, movedFile);
       } else {
         // Moving to a different group
+        const destGroup = newGroups[destGroupIndex];
         destGroup.files.splice(destination.index, 0, movedFile);
       }
 
-      // Καθαρίζουμε τα κενά groups
-      return newGroups.filter((g: ImageGroup) => g.files.length > 0);
+      // Filter out groups that might have become empty
+      return newGroups.filter(g => g.files.length > 0);
     });
   };
 
