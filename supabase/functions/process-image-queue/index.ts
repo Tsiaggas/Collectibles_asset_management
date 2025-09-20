@@ -133,89 +133,78 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 serve(async (_req) => {
   try {
-    // Χρησιμοποιούμε τα secrets που έχουμε ορίσει εμείς, όχι τα αυτόματα του Supabase, για σαφήνεια.
-    // Αυτή η function χρειάζεται πλήρη δικαιώματα για να διαχειρίζεται την "ουρά".
     const supabaseAdmin = createClient(
       Deno.env.get("PROJECT_URL")!,
       Deno.env.get("SERVICE_ROLE_KEY")!
     );
 
-    // <<-- ΝΕΑ ΛΟΓΙΚΗ: STAGING AREA -->>
-    // 1. Παίρνουμε ΟΛΑ τα "pending" αρχεία που έχει "προάγει" ο νέος Cron Job.
-    // Η λογική της αναμονής έχει μεταφερθεί ΕΚΤΟΣ της function, κάνοντάς την πιο αξιόπιστη.
+    // <<-- ΝΕΑ, ΑΠΛΟΥΣΤΕΥΜΕΝΗ ΛΟΓΙΚΗ -->>
+    // 1. Παίρνουμε ΟΛΑ τα νέα αρχεία που μόλις μπήκαν.
+    // Η επεξεργασία είναι άμεση, δεν περιμένουμε πια.
     const { data: queueItems, error: queueError } = await supabaseAdmin
       .from("image_processing_queue")
       .select("*")
-      .eq("status", "pending") // <-- Παίρνουμε μόνο όσα είναι έτοιμα για επεξεργασία
-      .limit(50); // Μπορούμε να έχουμε ένα μεγαλύτερο όριο τώρα
+      .eq("status", "new") // <-- Παίρνουμε απευθείας τα 'new'
+      .limit(50); 
 
     if (queueError) throw queueError;
     if (!queueItems || queueItems.length === 0) {
       return new Response(JSON.stringify({ message: "No new images to process." }), { status: 200 });
     }
 
-    // 2. Ομαδοποίηση αρχείων
+    // 2. Ομαδοποίηση βάσει του νέου path (UUID)
     const groupedFiles = new Map<string, any[]>();
     for (const item of queueItems) {
-      // Λογική ομαδοποίησης: 'gittensfront.jpg' -> 'gittens'
-      const baseName = item.object_name.split('/').pop()!
-        .replace(/front|back|1|2/i, '') // Αφαιρούμε λέξεις-κλειδιά
-        .replace(/\.[^/.]+$/, "") // Αφαιρούμε την κατάληξη
-        .trim();
+      // Το path είναι πλέον: public/<group-uuid>/<role>.ext
+      // Άρα το group-uuid είναι το δεύτερο στοιχείο
+      const pathParts = item.object_name.split('/');
+      if (pathParts.length < 2) continue; // Αγνοούμε αρχεία που δεν είναι σε φάκελο
+
+      const groupId = pathParts[1]; // Αυτό είναι το UUID του group
       
-      if (!groupedFiles.has(baseName)) {
-        groupedFiles.set(baseName, []);
+      if (!groupedFiles.has(groupId)) {
+        groupedFiles.set(groupId, []);
       }
-      groupedFiles.get(baseName)!.push(item);
+      groupedFiles.get(groupId)!.push(item);
     }
     
     // 3. Επεξεργασία κάθε ομάδας
-    for (const [baseName, items] of groupedFiles.entries()) {
-      console.log(`Processing group: ${baseName}`);
+    for (const [groupId, items] of groupedFiles.entries()) {
+      console.log(`Processing group: ${groupId}`);
       
       try {
-        // <<-- ΑΛΛΑΓΗ: Καλούμε την callOpenAI με τα items και τον supabaseAdmin
         const aiResult = await callOpenAI(items, supabaseAdmin);
 
-        // (Τα public URLs τα χρειαζόμαστε ακόμα για να τα αποθηκεύσουμε στη βάση)
-        const imageUrls: { url: string, type: 'front' | 'back' | 'lot' }[] = items.map(item => {
+        const imageUrls: { url: string, type: 'front' | 'back' | 'other' }[] = items.map(item => {
           const url = `${Deno.env.get("PROJECT_URL")}/storage/v1/object/public/${item.bucket_id}/${item.object_name}`;
-          let type: 'front' | 'back' | 'lot' = 'lot';
-          if (/front/i.test(item.object_name)) type = 'front';
-          if (/back/i.test(item.object_name)) type = 'back';
+          const filename = item.object_name.split('/').pop()!;
+          let type: 'front' | 'back' | 'other' = 'other';
+          if (/^front/i.test(filename)) type = 'front';
+          if (/^back/i.test(filename)) type = 'back';
           return { url, type };
         });
-
-        // Βρίσκουμε το πραγματικό όνομα αρχείου για το lot, αν υπάρχει
-        const lotItemName = items.find(item => /lot/i.test(item.object_name))?.object_name;
         
         const normalizedTeam = normalizeTeamName(aiResult.team);
 
-        // <<-- ΔΙΟΡΘΩΣΗ BUG ΣΤΗΝ ΑΝΑΘΕΣΗ ΕΙΚΟΝΩΝ -->>
         const frontUrl = imageUrls.find(u => u.type === 'front')?.url;
         const backUrl = imageUrls.find(u => u.type === 'back')?.url;
-        const lotUrl = imageUrls.find(u => u.type === 'lot')?.url;
         
-        // Βρίσκει μια κύρια εικόνα. Προτεραιότητα: front, μετά lot.
-        // Αν δεν υπάρχουν, παίρνει την πρώτη εικόνα του group ΠΟΥ ΔΕΝ ΕΙΝΑΙ 'back'.
-        // Ως έσχατη λύση (αν υπάρχει μόνο 'back' εικόνα), παίρνει την πρώτη που θα βρει.
-        const primaryImageUrl = frontUrl || lotUrl || imageUrls.find(u => u.type !== 'back')?.url || imageUrls[0]?.url;
+        // Ως κύρια εικόνα, παίρνουμε το front URL ή το πρώτο διαθέσιμο.
+        const primaryImageUrl = frontUrl || imageUrls[0]?.url;
 
         const upsertData = {
-          title: aiResult.title || (lotItemName ? lotItemName.split('/').pop()!.replace(/\.[^/.]+$/, "") : baseName),
+          title: aiResult.title || groupId, // Fallback στο UUID αν το AI αποτύχει
           set: aiResult.set,
           condition: aiResult.condition,
-          team: normalizedTeam, // <-- Αποθηκεύουμε την "καθαρή" εκδοχή
+          team: normalizedTeam,
           notes: aiResult.notes,
-          kind: aiResult.kind || (/lot/i.test(baseName) ? 'Lot' : 'Single'),
+          kind: aiResult.kind || (items.length > 1 ? 'Lot' : 'Single'),
           status: 'New',
-          numbering: aiResult.numbering, // <-- Προσθήκη του νέου πεδίου
-          // <<-- ΒΕΛΤΙΩΜΕΝΗ ΑΝΤΙΣΤΟΙΧΙΣΗ ΕΙΚΟΝΩΝ -->>
+          numbering: aiResult.numbering,
           image_url_front: primaryImageUrl,
           image_url_back: backUrl,
         };
         
-        // Χρησιμοποιούμε την upsert_card function που είχαμε φτιάξει!
         const { error: upsertError } = await supabaseAdmin.rpc('upsert_card', { payload: upsertData });
         if (upsertError) throw upsertError;
 
@@ -226,12 +215,10 @@ serve(async (_req) => {
         // Παύση για να αποφύγουμε το rate limit
         await delay(2000);
 
-      } catch (e) {
-        console.error(`Failed to process group ${baseName}:`, e.message);
+      } catch (e: any) {
+        console.error(`Failed to process group ${groupId}:`, e.message);
         const idsToUpdate = items.map(i => i.id);
 
-        // Έλεγχος για προσωρινά σφάλματα (rate limits, σφάλματα server)
-        // Αν το σφάλμα είναι τέτοιου τύπου, το αφήνουμε ως 'pending' για να ξαναπροσπαθήσει.
         const isTransientError = e.message.includes("rate_limit_exceeded") || 
                                  e.message.includes("502") || 
                                  e.message.includes("Bad gateway") ||
@@ -239,18 +226,20 @@ serve(async (_req) => {
                                  e.message.includes("503") ||
                                  e.message.includes("504");
 
+        // Τώρα, ΟΛΑ τα λάθη είναι μόνιμα γιατί δεν υπάρχει retry mechanism με cron.
+        // Αν αποτύχει, πρέπει να το δει ο χρήστης.
         if (isTransientError) {
-          console.log(`Transient error for ${baseName}. Leaving as pending for retry.`);
-        } else {
-          // Αυτό είναι ένα πιο μόνιμο σφάλμα (π.χ. λάθος API key, κακό prompt)
-          await supabaseAdmin.from("image_processing_queue").update({ status: 'error' }).in('id', idsToUpdate);
+          console.warn(`Transient error for ${groupId}. Marking as 'error' for manual review.`);
         }
+        
+        await supabaseAdmin.from("image_processing_queue").update({ status: 'error' }).in('id', idsToUpdate);
       }
     }
 
     return new Response(JSON.stringify({ message: `Processed ${groupedFiles.size} groups.` }), { status: 200 });
 
-  } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+  } catch (e: any) {
+    console.error("An unexpected error occurred in the main block:", e);
+    return new Response(JSON.stringify({ error: 'Bad request or unexpected error', details: e.message }), { status: 400 });
   }
 });
