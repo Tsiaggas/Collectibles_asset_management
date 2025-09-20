@@ -48,6 +48,7 @@ export function rowToItem(row: any): CardItem {
     status: row.status ?? 'Available',
     image_url_front: row.image_url_front ?? undefined,
     image_url_back: row.image_url_back ?? undefined,
+    extra_image_urls: row.extra_image_urls ?? [], // Προσθήκη του νέου πεδίου
     notes: row.notes ?? undefined,
     createdAt: row.created_at,
   };
@@ -69,6 +70,7 @@ export function itemToInsert(item: Omit<CardItem, 'id' | 'createdAt'>) {
     numbering: item.numbering,
     image_url_front: item.image_url_front,
     image_url_back: item.image_url_back,
+    extra_image_urls: item.extra_image_urls, // Προσθήκη του νέου πεδίου
   };
 }
 
@@ -88,6 +90,7 @@ export function itemToUpdate(item: CardItem) {
     numbering: item.numbering,
     image_url_front: item.image_url_front,
     image_url_back: item.image_url_back,
+    extra_image_urls: item.extra_image_urls, // Προσθήκη του νέου πεδίου
   };
 }
 

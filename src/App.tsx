@@ -8,6 +8,9 @@ import { Modal } from './components/Modal';
 import { Toast, ToastData } from './components/Toast';
 import { Checkbox, Select, TextArea, TextInput } from './components/Inputs';
 import { ImageUploader } from './components/ImageUploader';
+import { v4 as uuidv4 } from 'uuid';
+
+const BUCKET_NAME = 'filacollectibles';
 
 const DEFAULT_DRIVE_FOLDER = 'CardInventory_MVP';
 
@@ -95,38 +98,24 @@ export const App: React.FC = () => {
     setNumberingOptions(numberings);
   }, [items]);
 
-  async function addItem(newItem: Omit<CardItem, 'id' | 'createdAt'>) {
+  async function addItems(newItems: Omit<CardItem, 'id' | 'createdAt'>[]) {
     if (!hasSupabase) { setToast({ message: 'Supabase δεν έχει ρυθμιστεί', type: 'error' }); return; }
-    // Upsert με μοναδικότητα στο title_norm (server-side dedupe)
+    const payload = newItems.map(itemToInsert);
     const { data, error } = await supabase
       .from('cards')
-      .upsert(itemToInsert(newItem), { onConflict: 'title_norm', ignoreDuplicates: true })
+      .upsert(payload, { onConflict: 'title_norm', ignoreDuplicates: true })
       .select('*');
     if (error) {
-      // Fallback για παλιό schema χωρίς kind/team
-      const minimal: any = itemToInsert(newItem);
-      delete minimal.kind;
-      delete minimal.team;
-      const { data: data2, error: error2 } = await supabase
-        .from('cards')
-        .upsert(minimal, { onConflict: 'title_norm', ignoreDuplicates: true })
-        .select('*');
-      if (!error2) {
-        if ((data2?.length ?? 0) > 0) {
-          setItems((prev) => [ ...(data2 ?? []).map(rowToItem as any), ...prev ]);
-          return;
-        }
-        setToast({ message: 'Υπάρχει ήδη κάρτα με αυτόν τον τίτλο — έγινε skip', type: 'info' });
-        return;
-      }
-      setToast({ message: 'Αποτυχία προσθήκης στη Supabase', type: 'error' });
+      setToast({ message: `Αποτυχία προσθήκης: ${error.message}`, type: 'error' });
       return;
     }
     if ((data?.length ?? 0) === 0) {
-      setToast({ message: 'Υπάρχει ήδη κάρτα με αυτόν τον τίτλο — έγινε skip', type: 'info' });
+      setToast({ message: 'Όλες οι κάρτες ήταν διπλότυπες — έγινε skip', type: 'info' });
       return;
     }
     setItems((prev) => [ ...(data ?? []).map(rowToItem), ...prev ]);
+    const skipped = newItems.length - (data?.length ?? 0);
+    setToast({ message: `Προστέθηκαν ${data?.length} κάρτες ${skipped > 0 ? `(skip ${skipped})` : ''}`, type: 'success' });
   }
 
   async function updateItem(updated: CardItem) {
@@ -150,6 +139,75 @@ export const App: React.FC = () => {
     if (error) { setToast({ message: 'Αποτυχία διαγραφής στη Supabase', type: 'error' }); return; }
     setItems((prev) => prev.filter((it) => it.id !== id));
   }
+
+  // --- ΝΕΑ Λειτουργικότητα Διαχείρισης Εικόνων ---
+
+  // Βοηθητική συνάρτηση για να βρει το UUID από ένα URL εικόνας
+  const getGroupIdFromUrl = (url: string | undefined): string | null => {
+    if (!url) return null;
+    try {
+      const path = new URL(url).pathname;
+      const parts = path.split('/');
+      // ψάχνουμε για το UUID, το οποίο είναι το προτελευταίο στοιχείο
+      // π.χ. /storage/v1/object/public/filacollectibles/public/UUID/front.jpg
+      return parts.length > 2 ? parts[parts.length - 2] : null;
+    } catch {
+      return null;
+    }
+  };
+
+  async function handleAddImage(item: CardItem, file: File) {
+    if (!hasSupabase) { setToast({ message: 'Supabase δεν έχει ρυθμιστεί', type: 'error' }); return; }
+
+    const groupId = getGroupIdFromUrl(item.image_url_front) || getGroupIdFromUrl(item.image_url_back) || uuidv4();
+    const allImageUrls = [item.image_url_front, item.image_url_back, ...(item.extra_image_urls || [])].filter(Boolean);
+    const nextImageIndex = allImageUrls.length + 1;
+    const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const newPath = `public/${groupId}/${nextImageIndex}.${extension}`;
+
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(newPath, file, { upsert: true });
+
+    if (uploadError) {
+      setToast({ message: `Αποτυχία ανεβάσματος: ${uploadError.message}`, type: 'error' });
+      return;
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from(BUCKET_NAME).getPublicUrl(newPath);
+    
+    const updatedExtraUrls = [...(item.extra_image_urls || []), publicUrl];
+    const updatedItem = { ...item, extra_image_urls: updatedExtraUrls };
+
+    await updateItem(updatedItem);
+    setEdit({ open: true, item: updatedItem }); // Ενημέρωση του modal state
+    setToast({ message: 'Η εικόνα προστέθηκε', type: 'success' });
+  }
+
+  async function handleDeleteImage(item: CardItem, imageUrlToDelete: string) {
+    if (!hasSupabase) { setToast({ message: 'Supabase δεν έχει ρυθμιστεί', type: 'error' }); return; }
+    
+    const objectPath = new URL(imageUrlToDelete).pathname.split(`/render/image/upload/${BUCKET_NAME}/`).pop();
+    if (!objectPath) {
+      setToast({ message: 'Δεν βρέθηκε το path της εικόνας', type: 'error' });
+      return;
+    }
+
+    const { error: deleteError } = await supabase.storage.from(BUCKET_NAME).remove([objectPath]);
+    if (deleteError) {
+      setToast({ message: `Αποτυχία διαγραφής από storage: ${deleteError.message}`, type: 'error' });
+    }
+
+    let updatedItem: CardItem = { ...item };
+    if (item.image_url_front === imageUrlToDelete) updatedItem.image_url_front = undefined;
+    if (item.image_url_back === imageUrlToDelete) updatedItem.image_url_back = undefined;
+    updatedItem.extra_image_urls = (item.extra_image_urls || []).filter(url => url !== imageUrlToDelete);
+
+    await updateItem(updatedItem);
+    setEdit({ open: true, item: updatedItem }); // Ενημέρωση του modal state
+    setToast({ message: 'Η εικόνα διαγράφηκε', type: 'success' });
+  }
+
 
   function exportJson() {
     const blob = new Blob([
@@ -176,7 +234,9 @@ export const App: React.FC = () => {
       vendora: it.platforms.vendora,
       ebay: it.platforms.ebay,
       status: it.status,
-      imageUrl: it.imageUrl ?? '',
+      image_url_front: it.image_url_front ?? '',
+      image_url_back: it.image_url_back ?? '',
+      extra_image_urls: (it.extra_image_urls ?? []).join(', '),
       notes: it.notes ?? '',
       createdAt: it.createdAt,
     }));
@@ -217,7 +277,9 @@ export const App: React.FC = () => {
           price: i.price ?? undefined,
           platforms: i.platforms ?? { vinted: false, vendora: false, ebay: false },
           status: i.status ?? 'Available',
-          imageUrl: i.imageUrl ?? undefined,
+          image_url_front: i.image_url_front ?? undefined,
+          image_url_back: i.image_url_back ?? undefined,
+          extra_image_urls: i.extra_image_urls ?? [],
           notes: i.notes ?? undefined,
         }));
         const { data, error } = await supabase
@@ -438,17 +500,47 @@ Single\tGengar\tFossil\tLP\t39.9\tyes\ttrue\t0\tInactive\t\tshadow`}
       <Modal open={edit.open} title="Επεξεργασία" onClose={() => setEdit({ open: false })}>
         {edit.item && (
           <div className="space-y-4">
-            {/* Image Previews & Download Buttons */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Front Image</label>
-                <img src={edit.item.image_url_front || DEFAULT_PLACEHOLDER_IMAGE} alt="Front view" className="w-full rounded-lg object-contain border dark:border-gray-700" />
-                {edit.item.image_url_front && <a href={edit.item.image_url_front} download target="_blank" rel="noopener noreferrer" className="btn w-full">Download Front</a>}
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Back Image</label>
-                <img src={edit.item.image_url_back || DEFAULT_PLACEHOLDER_IMAGE} alt="Back view" className="w-full rounded-lg object-contain border dark:border-gray-700" />
-                {edit.item.image_url_back && <a href={edit.item.image_url_back} download target="_blank" rel="noopener noreferrer" className="btn w-full">Download Back</a>}
+            {/* Image Previews & Management */}
+            <div className="space-y-3">
+              <label className="text-sm font-medium block">Images</label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {[
+                  { url: edit.item.image_url_front, label: 'Front' },
+                  { url: edit.item.image_url_back, label: 'Back' },
+                  ...(edit.item.extra_image_urls || []).map(url => ({ url, label: 'Extra' }))
+                ]
+                .filter(img => img.url)
+                .map((img, index) => (
+                  <div key={index} className="relative group aspect-square">
+                    <img src={img.url} alt={img.label} className="w-full h-full object-cover rounded-lg border dark:border-gray-600" />
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
+                      <button 
+                        onClick={() => handleDeleteImage(edit.item!, img.url!)}
+                        className="text-white p-2 bg-red-600 rounded-full hover:bg-red-700 transition-colors"
+                        aria-label="Delete image"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                 {/* Add new image button */}
+                 <label className="flex items-center justify-center aspect-square rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-indigo-500 cursor-pointer transition-colors">
+                    <div className="text-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                      <span className="mt-2 block text-sm font-medium text-gray-500">Add Image</span>
+                    </div>
+                    <input 
+                      type="file" 
+                      className="hidden" 
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleAddImage(edit.item!, file);
+                        e.currentTarget.value = ''; // Reset input
+                      }}
+                    />
+                  </label>
               </div>
             </div>
 

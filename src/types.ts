@@ -19,6 +19,7 @@ export interface CardItem {
   status: CardStatus;
   image_url_front?: string;
   image_url_back?: string;
+  extra_image_urls?: string[]; // Λίστα για τις έξτρα εικόνες
   notes?: string;
   createdAt: string; // ISO string
 }
