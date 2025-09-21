@@ -156,7 +156,7 @@ export const App: React.FC = () => {
     // 1. Generate CSV
     try {
       const csvContent = generateEbayCsv(itemsToExport, usdRate);
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);

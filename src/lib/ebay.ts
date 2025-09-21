@@ -9,49 +9,52 @@ const conditionMap: { [key: string]: string } = {
   // Key is lowercase of our app's condition
   'gem mint': '1000', // Graded
   'mint': '1000', // Graded
-  'near mint or better': '2500', // Ungraded
-  'near mint': '2500', // Ungraded
+  'near mint or better': '3000', // Ungraded - Changed from 2500 to 3000 (Very Good) based on eBay error 21916883
+  'near mint': '3000', // Ungraded - Changed from 2500 to 3000
   'excellent': '4000', // Ungraded
   'very good': '5000', // Ungraded,
   'poor': '7000', // Ungraded
   'lp': '4000', // Assuming LP (Lightly Played) is Excellent
-  'nm': '2500', // Ungraded
+  'nm': '3000', // Ungraded - Changed from 2500 to 3000
 };
-const DEFAULT_CONDITION_ID = '2500'; // Default to Near Mint for Ungraded
+const DEFAULT_CONDITION_ID = '3000'; // Default to Very Good for Ungraded, was 2500
 
 // Function to generate the CSV content as a string
 export function generateEbayCsv(items: CardItem[], usdRate: number | null): string {
+  // Headers based on the official eBay template provided by the user.
+  // This is the definitive structure.
   const headers = [
-    'Action',
-    'Custom label (SKU)',
-    'Category',
+    '*Action(SiteID=US|Country=US|Currency=USD|Version=1193|CSVmaual=true)',
+    '*Category',
     'Title',
-    'Condition',
-    'Condition description',
-    'Item description',
-    'Format',
-    'Duration',
-    'Price',
-    'Quantity',
-    'Item Photo URL',
-    'Location',
+    'CustomLabel',
+    '*ConditionID',
+    'ConditionDescription',
+    'PicURL',
+    '*StartPrice',
+    '*Quantity',
+    'Description',
+    '*Format',
+    '*Duration',
+    '*Location',
     'ShippingProfileName',
     'ReturnProfileName',
     'PaymentProfileName',
     'Relationship',
-    'Relationship details',
-    // Item Specifics will be added dynamically
+    'RelationshipDetails',
+    // Item Specifics (C:...) will be added dynamically below
   ];
   
   // Find all unique item specifics keys across all selected items
-  const allSpecifics = new Set<string>(['Graded']); // Always include Graded
+  const allSpecifics = new Set<string>(['Graded', 'Sport']); // Always include Graded and Sport (mandatory)
   items.forEach(item => {
     if (item.team) allSpecifics.add('Team');
     if (item.set) allSpecifics.add('Set');
     if (item.numbering) allSpecifics.add('Card Number');
   });
 
-  const specificsHeaders = Array.from(allSpecifics).map(s => `Item specifics[${s}]`);
+  // Per template, item specifics are prefixed with "C:"
+  const specificsHeaders = Array.from(allSpecifics).map(s => `C:${s}`);
   const fullHeaders = [...headers, ...specificsHeaders];
 
   const rows = items.map(item => {
@@ -64,40 +67,42 @@ export function generateEbayCsv(items: CardItem[], usdRate: number | null): stri
 
     const conditionId = conditionMap[item.condition?.toLowerCase() ?? ''] || DEFAULT_CONDITION_ID;
 
-    // -->> ΝΕΟ: Υπολογισμός τιμής σε USD για το eBay
     let priceForEbay: string | number = '';
     if (item.price != null && usdRate != null) {
       priceForEbay = (item.price * usdRate).toFixed(2);
     }
 
+    // This row object now maps directly to the official eBay template headers.
     const row: { [key: string]: string | number } = {
-      'Action': 'Add',
-      'Custom label (SKU)': item.id,
-      'Category': EBAY_CATEGORY_ID,
+      '*Action(SiteID=US|Country=US|Currency=USD|Version=1193|CSVmaual=true)': 'Add',
+      'CustomLabel': item.id,
+      '*Category': EBAY_CATEGORY_ID,
       'Title': item.title,
-      'Condition': conditionId,
-      'Condition description': item.condition ?? '',
-      'Item description': item.notes ?? `Please see photos for card condition. Card sold as is.`,
-      'Format': 'FixedPrice',
-      'Duration': 'GTC', // Good 'Til Cancelled
-      'Price': priceForEbay,
-      'Quantity': 1,
-      'Item Photo URL': imageUrls,
-      'Location': 'Serres, Greece', // More specific location
+      '*ConditionID': conditionId,
+      'ConditionDescription': item.condition ?? '',
+      'Description': item.notes ?? `Please see photos for card condition. Card sold as is.`,
+      '*Format': 'FixedPrice',
+      '*Duration': 'GTC', // Good 'Til Cancelled
+      '*StartPrice': priceForEbay,
+      '*Quantity': 1,
+      'PicURL': imageUrls, // Correct header for images.
+      '*Location': 'Serres, Greece',
       'ShippingProfileName': 'International Shipping', // MUST MATCH your eBay Business Policy Name
       'ReturnProfileName': 'Returns', // MUST MATCH your eBay Business Policy Name
       'PaymentProfileName': 'Payment', // MUST MATCH your eBay Business Policy Name
       'Relationship': '',
-      'Relationship details': '',
-      'Item specifics[Graded]': 'No',
-      'Item specifics[Team]': item.team ?? '',
-      'Item specifics[Set]': item.set ?? '',
-      'Item specifics[Card Number]': item.numbering ?? '',
+      'RelationshipDetails': '',
+      'C:Graded': 'No',
+      'C:Sport': 'Soccer', // Added mandatory Sport item specific. Default to Soccer.
+      'C:Team': item.team ?? '',
+      'C:Set': item.set ?? '',
+      'C:Card Number': item.numbering ?? '',
     };
 
     // Map the row object to the correct header order
     return fullHeaders.map(header => `"${String(row[header] ?? '').replace(/"/g, '""')}"`).join(',');
   });
 
-  return [fullHeaders.join(','), ...rows].join('\n');
+  // Use CRLF line endings (\r\n) for Windows/eBay compatibility.
+  return [fullHeaders.join(','), ...rows].join('\r\n');
 }
