@@ -2,34 +2,36 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode } from "https://deno.land/std@0.177.0/encoding/base64.ts";
 
-// <<-- ΑΝΑΒΑΘΜΙΣΜΕΝΟ PROMPT v4 -->>
+// <<-- ΑΝΑΒΑΘΜΙΣΜΕΝΟ PROMPT v5 -->>
 const OAI_PROMPT = `
 You are an expert trading card identifier, preparing structured data for an asset management tool.
 From the provided images, extract the card's details precisely.
-Your response MUST be in JSON format. Prioritize the 'front' image for primary details.
+Your response MUST be in JSON format. Prioritize the 'front' image for primary details if available.
+
+**CRITICAL FIRST STEP: Determine if this is a 'Single' card or a 'Lot'.**
+- If only ONE card is clearly depicted, proceed as a 'Single'.
+- If MULTIPLE distinct cards are visible, you MUST treat it as a 'Lot'.
 
 **JSON Schema & Instructions:**
 
-- **title**: (string) A detailed, structured title. CONSTRUCT IT using this template:
-  '[Autograph?] [Player Name] [Year] [Set] [Team] [/Numbering?]'.
-  - ONLY include 'Autograph' if you see a signature on the card.
-  - Player Name, Year, Set, and Team should be identified from the card.
-  - ONLY include the numbering (e.g., '/99') if it's visible.
-  - Example: "Autograph Serge Gnabry 2023-2024 Topps Museum Collection Bayern Munich /99"
-  - Example (no autograph/numbering): "Jamal Musiala 2023 Topps Chrome FC Bayern Munich"
+--- IF 'Single' ---
+- **title**: (string) CONSTRUCT IT using this template: '[Autograph?] [Player Name] [Year] [Set] [Team] [/Numbering?]'.
+  - Example: "Autograph Serge Gnabry 2023-2024 Topps Museum Collection FC Bayern Munich /99"
+- **notes**: (string) A concise description in ENGLISH. Mention key features like player, team, set, and any special characteristics.
+  - Example: "Serge Gnabry autograph card from 2023-2024 Topps Museum Collection. Numbered /99. A great collectible for any Bayern Munich fan."
 
-- **set**: (string) The specific set of the card (e.g., "Topps Museum Collection").
+--- IF 'Lot' ---
+- **title**: (string) CONSTRUCT IT using this template: 'Lot of [Number of Cards] [Set] cards - [Team]'.
+  - Example: "Lot of 5 Topps Chrome cards - FSV Mainz 05"
+- **notes**: (string) A concise description in ENGLISH. SUMMARIZE the content. List the most prominent players you can identify.
+  - Example: "Lot of 5 cards from the Topps Chrome set, featuring players from FSV Mainz 05. Includes Anton Stach, Moussa Niakhaté, Jeremiah St. Juste, and Jonathan Burkardt."
+
+--- COMMON FIELDS (for both Single & Lot) ---
+- **set**: (string) The specific set of the card(s) (e.g., "Topps Chrome", "Topps Museum Collection").
 - **condition**: (string) The card's condition (e.g., "Near Mint"). Leave null if unclear.
-- **team**: (string) The player's team. IMPORTANT: Be consistent. For Bayern, always return "FC Bayern Munich".
-- **kind**: (string) "Single" or "Lot".
-- **numbering**: (string) The card's serial number suffix (e.g., "/25", "/49", "/99"). If the card is NOT numbered, use the string "base".
-- **notes**: (string) A **concise description in ENGLISH**. 
-  - For **Single cards**, mention key features like player, team, set, and any special characteristics (e.g., "Autographed card", "Numbered to 99", "Refractor parallel").
-  - For **Lots**, summarize the content (e.g., "Lot of 3 cards from VfL Wolfsburg, including a numbered Maxence Lacroix autograph.").
-
-**Examples:**
-- **Single Card Notes:** "Serge Gnabry autograph card from 2023-2024 Topps Museum Collection. Numbered /99. A great collectible for any Bayern Munich fan."
-- **Lot Notes:** "Lot of 3 VfL Wolfsburg cards from Topps Chrome. Features a numbered Konstantinos Koulierakis /25 and a Maxence Lacroix autograph. Excellent for team collectors."
+- **team**: (string) The primary team featured. IMPORTANT: Be consistent. For Bayern, always return "FC Bayern Munich". For Mainz, use "FSV Mainz 05".
+- **kind**: (string) MUST be "Single" or "Lot". This is mandatory.
+- **numbering**: (string) For 'Single' cards, the serial number suffix (e.g., "/25", "/99"). If not numbered, use "base". For 'Lot', this field should be null.
 `;
 
 // Helper για "καθαρισμό" ονομάτων ομάδων
@@ -37,6 +39,8 @@ const teamNameMap: { [key: string]: string } = {
   'fc bayern münchen': 'FC Bayern Munich',
   'bayern munich': 'FC Bayern Munich',
   'bayern münchen': 'FC Bayern Munich',
+  'fsv mainz 05': 'FSV Mainz 05',
+  'mainz 05': 'FSV Mainz 05',
   // Πρόσθεσε εδώ κι άλλες παραλλαγές στο μέλλον
 };
 
@@ -198,7 +202,7 @@ serve(async (_req) => {
           condition: aiResult.condition,
           team: normalizedTeam,
           notes: aiResult.notes,
-          kind: aiResult.kind || (items.length > 1 ? 'Lot' : 'Single'),
+          kind: aiResult.kind || (items.length > 2 ? 'Lot' : 'Single'), // Improved fallback
           status: 'New',
           numbering: aiResult.numbering,
           image_url_front: primaryImageUrl,
