@@ -56,6 +56,9 @@ const teamNameMap: { [key: string]: string } = {
   'vfl bochum': 'VfL Bochum', 'bochum': 'VfL Bochum', 'μπόχουμ': 'VfL Bochum',
   'fc st. pauli': 'FC St. Pauli', 'st. pauli': 'FC St. Pauli', 'kiezkicker': 'FC St. Pauli', 'σανκτ πάουλι': 'FC St. Pauli',
   'holstein kiel': 'Holstein Kiel', 'kiel': 'Holstein Kiel', 'die störche': 'Holstein Kiel', 'χόλσταϊν κίελου': 'Holstein Kiel',
+  'fc schalke 04': 'FC Schalke 04', 'schalke 04': 'FC Schalke 04', 'schalke': 'FC Schalke 04', 's04': 'FC Schalke 04', 'σάλκε': 'FC Schalke 04',
+  'hertha bsc': 'Hertha Berlin', 'hertha berlin': 'Hertha Berlin', 'hertha': 'Hertha Berlin', 'χέρτα βερολίνου': 'Hertha Berlin',
+  '1. fc köln': '1. FC Köln', 'fc köln': '1. FC Köln', 'köln': '1. FC Köln', 'cologne': '1. FC Köln', 'κελν': '1. FC Köln',
 
   // England: Premier League
   'arsenal fc': 'Arsenal FC', 'arsenal': 'Arsenal FC', 'afc': 'Arsenal FC', 'gunners': 'Arsenal FC', 'άρσεναλ': 'Arsenal FC',
@@ -326,6 +329,8 @@ const teamNameMap: { [key: string]: string } = {
   'tigres uanl': 'Tigres UANL', 'tigres': 'Tigres UANL', 'τίγκρες': 'Tigres UANL',
   'club tijuana': 'Club Tijuana', 'tijuana': 'Club Tijuana', 'xolos': 'Club Tijuana', 'τιχουάνα': 'Club Tijuana',
   'deportivo toluca fc': 'Deportivo Toluca FC', 'toluca': 'Deportivo Toluca FC', 'τολούκα': 'Deportivo Toluca FC',
+  'multiple teams': 'Multiple Teams', 'various teams': 'Multiple Teams', 'various': 'Multiple Teams',
+  'rb salzburg': 'RB Salzburg', 'red bull salzburg': 'RB Salzburg', 'salzburg': 'RB Salzburg', 'fc salzburg': 'RB Salzburg', 'σάλτσμπουργκ': 'RB Salzburg',
 };
 
 function normalizeTeamName(name: string | null | undefined): string | undefined {
