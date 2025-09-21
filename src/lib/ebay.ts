@@ -45,16 +45,20 @@ export function generateEbayCsv(items: CardItem[], usdRate: number | null): stri
     // Item Specifics (C:...) will be added dynamically below
   ];
   
-  // Find all unique item specifics keys across all selected items
-  const allSpecifics = new Set<string>(['Graded', 'Sport']); // Always include Graded and Sport (mandatory)
-  items.forEach(item => {
-    if (item.team) allSpecifics.add('Team');
-    if (item.set) allSpecifics.add('Set');
-    if (item.numbering) allSpecifics.add('Card Number');
-  });
+  // Item specifics: Only include headers for specifics that ALL items have values for
+  // This prevents empty strings in required columns which cause eBay parsing failures
+  const hasAllTeams = items.every(item => item.team && item.team.trim().length > 0);
+  const hasAllSets = items.every(item => item.set && item.set.trim().length > 0);
+  const hasAllNumbers = items.every(item => item.numbering && item.numbering.trim().length > 0);
 
-  // Per template, item specifics are prefixed with "C:"
-  const specificsHeaders = Array.from(allSpecifics).map(s => `C:${s}`);
+  const specificsHeaders: string[] = [];
+  specificsHeaders.push('C:Graded'); // Always required
+  specificsHeaders.push('C:Sport');  // Always required
+
+  if (hasAllTeams) specificsHeaders.push('C:Team');
+  if (hasAllSets) specificsHeaders.push('C:Set');
+  if (hasAllNumbers) specificsHeaders.push('C:Card Number');
+
   const fullHeaders = [...headers, ...specificsHeaders];
 
   const rows = items.map(item => {
@@ -79,7 +83,7 @@ export function generateEbayCsv(items: CardItem[], usdRate: number | null): stri
     }
 
     // Validate that we have a valid price before creating the row
-    if (priceForEbay === '' || priceForEbay === 0) {
+    if (priceForEbay === '' || parseFloat(String(priceForEbay)) <= 0) {
       throw new Error(`Invalid price for item: ${item.title}. Price must be greater than 0.`);
     }
 
@@ -105,10 +109,12 @@ export function generateEbayCsv(items: CardItem[], usdRate: number | null): stri
       'RelationshipDetails': '',
       'C:Graded': 'No',
       'C:Sport': 'Soccer', // Added mandatory Sport item specific. Default to Soccer.
-      'C:Team': (item.team ?? '').trim() || '',
-      'C:Set': (item.set ?? '').replace(/\//g, '-').trim() || '',
-      'C:Card Number': (item.numbering ?? '').trim() || '',
     };
+
+    // Only add optional specifics if their headers are included
+    if (hasAllTeams) row['C:Team'] = (item.team ?? '').trim();
+    if (hasAllSets) row['C:Set'] = (item.set ?? '').replace(/\//g, '-').trim();
+    if (hasAllNumbers) row['C:Card Number'] = (item.numbering ?? '').trim();
 
     // Map the row object to the correct header order
     return fullHeaders.map(header => `"${String(row[header] ?? '').replace(/"/g, '""')}"`).join(',');
