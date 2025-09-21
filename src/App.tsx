@@ -75,7 +75,8 @@ export const App: React.FC = () => {
         const res = await fetch('https://api.frankfurter.app/latest?from=EUR&to=USD');
         if (!res.ok) throw new Error('Failed to fetch rate');
         const data = await res.json();
-        setUsdRate(data.rates.USD);
+        // Η API επιστρέφει: { "amount": 1, "base": "EUR", "date": "2024-01-01", "rates": { "USD": 1.1234 } }
+        setUsdRate(data.rates?.USD || null);
       } catch (error) {
         console.error("Could not fetch exchange rate:", error);
         setToast({ message: 'Could not fetch USD exchange rate.', type: 'error' });

@@ -34,6 +34,10 @@ export function generateEbayCsv(items: CardItem[], usdRate: number | null): stri
     'Price',
     'Quantity',
     'Item Photo URL',
+    'Location',
+    'ShippingProfileName',
+    'ReturnProfileName',
+    'PaymentProfileName',
     'Relationship',
     'Relationship details',
     // Item Specifics will be added dynamically
@@ -79,6 +83,10 @@ export function generateEbayCsv(items: CardItem[], usdRate: number | null): stri
       'Price': priceForEbay,
       'Quantity': 1,
       'Item Photo URL': imageUrls,
+      'Location': 'Serres, Greece', // More specific location
+      'ShippingProfileName': 'International Shipping', // MUST MATCH your eBay Business Policy Name
+      'ReturnProfileName': 'Returns', // MUST MATCH your eBay Business Policy Name
+      'PaymentProfileName': 'Payment', // MUST MATCH your eBay Business Policy Name
       'Relationship': '',
       'Relationship details': '',
       'Item specifics[Graded]': 'No',
