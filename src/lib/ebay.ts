@@ -79,8 +79,8 @@ export function generateEbayCsv(items: CardItem[], usdRate: number | null): stri
       '*Category': EBAY_CATEGORY_ID,
       'Title': item.title,
       '*ConditionID': conditionId,
-      'ConditionDescription': item.condition ?? '',
-      'Description': item.notes ?? `Please see photos for card condition. Card sold as is.`,
+      'ConditionDescription': (item.condition ?? '').replace(/,/g, ' '),
+      'Description': (item.notes ?? `Please see photos for card condition. Card sold as is.`).replace(/,|\n|\r/g, ' '),
       '*Format': 'FixedPrice',
       '*Duration': 'GTC', // Good 'Til Cancelled
       '*StartPrice': priceForEbay,
@@ -95,7 +95,7 @@ export function generateEbayCsv(items: CardItem[], usdRate: number | null): stri
       'C:Graded': 'No',
       'C:Sport': 'Soccer', // Added mandatory Sport item specific. Default to Soccer.
       'C:Team': item.team ?? '',
-      'C:Set': item.set ?? '',
+      'C:Set': (item.set ?? '').replace(/\//g, '-'),
       'C:Card Number': item.numbering ?? '',
     };
 
