@@ -58,34 +58,45 @@ export function generateEbayCsv(items: CardItem[], usdRate: number | null): stri
   const fullHeaders = [...headers, ...specificsHeaders];
 
   const rows = items.map(item => {
-    // Combine all image URLs, separated by '|'
-    const imageUrls = [
+    // Combine all image URLs, separated by '|', ensure no empty URLs
+    const validImageUrls = [
       item.image_url_front,
       item.image_url_back,
       ...(item.extra_image_urls || [])
-    ].filter(Boolean).join('|');
+    ].filter(url => url && url.trim().length > 0);
+
+    if (validImageUrls.length === 0) {
+      throw new Error(`No valid image URLs found for item: ${item.title}`);
+    }
+
+    const imageUrls = validImageUrls.join('|');
 
     const conditionId = conditionMap[item.condition?.toLowerCase() ?? ''] || DEFAULT_CONDITION_ID;
 
     let priceForEbay: string | number = '';
-    if (item.price != null && usdRate != null) {
+    if (item.price != null && item.price > 0 && usdRate != null && usdRate > 0) {
       priceForEbay = (item.price * usdRate).toFixed(2);
+    }
+
+    // Validate that we have a valid price before creating the row
+    if (priceForEbay === '' || priceForEbay === 0) {
+      throw new Error(`Invalid price for item: ${item.title}. Price must be greater than 0.`);
     }
 
     // This row object now maps directly to the official eBay template headers.
     const row: { [key: string]: string | number } = {
       '*Action(SiteID=US|Country=US|Currency=USD|Version=1193|CSVmaual=true)': 'Add',
-      'CustomLabel': item.id,
+      'CustomLabel': (item.id ?? '').trim() || `card-${Date.now()}`,
       '*Category': EBAY_CATEGORY_ID,
-      'Title': item.title,
+      'Title': (item.title ?? '').trim() || 'Untitled Card',
       '*ConditionID': conditionId,
-      'ConditionDescription': (item.condition ?? '').replace(/,/g, ' '),
-      'Description': (item.notes ?? `Please see photos for card condition. Card sold as is.`).replace(/,|\n|\r/g, ' '),
+      'ConditionDescription': ((item.condition ?? '').replace(/,/g, ' ')).trim(),
+      'Description': ((item.notes ?? `Please see photos for card condition. Card sold as is.`).replace(/,|\n|\r/g, ' ')).trim(),
       '*Format': 'FixedPrice',
       '*Duration': 'GTC', // Good 'Til Cancelled
       '*StartPrice': priceForEbay,
       '*Quantity': 1,
-      'PicURL': imageUrls, // Correct header for images.
+      'PicURL': imageUrls || '', // Correct header for images. Cannot be empty.
       '*Location': 'Serres, Greece',
       'ShippingProfileName': 'International Shipping', // MUST MATCH your eBay Business Policy Name
       'ReturnProfileName': 'Returns', // MUST MATCH your eBay Business Policy Name
@@ -94,9 +105,9 @@ export function generateEbayCsv(items: CardItem[], usdRate: number | null): stri
       'RelationshipDetails': '',
       'C:Graded': 'No',
       'C:Sport': 'Soccer', // Added mandatory Sport item specific. Default to Soccer.
-      'C:Team': item.team ?? '',
-      'C:Set': (item.set ?? '').replace(/\//g, '-'),
-      'C:Card Number': item.numbering ?? '',
+      'C:Team': (item.team ?? '').trim() || '',
+      'C:Set': (item.set ?? '').replace(/\//g, '-').trim() || '',
+      'C:Card Number': (item.numbering ?? '').trim() || '',
     };
 
     // Map the row object to the correct header order

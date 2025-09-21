@@ -153,6 +153,17 @@ export const App: React.FC = () => {
 
     const itemsToExport = items.filter(it => selectedIds.has(it.id));
     
+    // -->> NEW: Validate that all selected items have a price.
+    const itemsWithoutPrice = itemsToExport.filter(it => it.price == null || it.price <= 0);
+    if (itemsWithoutPrice.length > 0) {
+      const titles = itemsWithoutPrice.map(it => it.title).slice(0, 3).join(', ');
+      setToast({ 
+        message: `Error: ${itemsWithoutPrice.length} selected card(s) have no price. Please set a price for: ${titles}...`, 
+        type: 'error' 
+      });
+      return;
+    }
+
     // 1. Generate CSV
     try {
       const csvContent = generateEbayCsv(itemsToExport, usdRate);
