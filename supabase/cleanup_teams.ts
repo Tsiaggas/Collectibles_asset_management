@@ -1,8 +1,37 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { configSync } from "https://deno.land/x/dotenv@v3.2.2/mod.ts";
+
+// --- Custom .env parser to bypass the problematic library ---
+function parseEnv(filePath: URL): Record<string, string> {
+  try {
+    const text = Deno.readTextFileSync(filePath);
+    const env: Record<string, string> = {};
+    for (const line of text.split("\n")) {
+      const trimmedLine = line.trim();
+      if (trimmedLine.length === 0 || trimmedLine.startsWith("#")) {
+        continue;
+      }
+      const [key, ...valueParts] = trimmedLine.split("=");
+      const value = valueParts.join("=").trim();
+      // Remove quotes if they exist at the start and end
+      if (value.startsWith('"') && value.endsWith('"')) {
+        env[key.trim()] = value.slice(1, -1);
+      } else {
+        env[key.trim()] = value;
+      }
+    }
+    return env;
+  } catch (e) {
+    if (e instanceof Deno.errors.NotFound) {
+      console.error(`Error: .env file not found at path: ${filePath.pathname}`);
+      return {};
+    }
+    throw e;
+  }
+}
+// --- End of custom parser ---
 
 // Load environment variables from .env file in the root
-const env = configSync({ path: new URL('../.env', import.meta.url).pathname });
+const env = parseEnv(new URL('../.env', import.meta.url));
 
 const SUPABASE_URL = env.SUPABASE_URL;
 const SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
