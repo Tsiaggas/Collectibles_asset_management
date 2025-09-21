@@ -187,11 +187,28 @@ export const App: React.FC = () => {
   async function handleDeleteImage(item: CardItem, imageUrlToDelete: string) {
     if (!hasSupabase) { setToast({ message: 'Supabase δεν έχει ρυθμιστεί', type: 'error' }); return; }
     
-    const objectPath = new URL(imageUrlToDelete).pathname.split(`/render/image/upload/${BUCKET_NAME}/`).pop();
-    if (!objectPath) {
-      setToast({ message: 'Δεν βρέθηκε το path της εικόνας', type: 'error' });
-      return;
-    }
+    // Υποστήριξη δύο μορφών public URL:
+    // 1) /storage/v1/object/public/<bucket>/<path>
+    // 2) /render/image/upload/<bucket>/<path>
+    let objectPath: string | undefined;
+    try {
+      const pathname = new URL(imageUrlToDelete).pathname;
+      const storagePrefix = `/storage/v1/object/public/${BUCKET_NAME}/`;
+      const renderPrefix = `/render/image/upload/${BUCKET_NAME}/`;
+      if (pathname.includes(storagePrefix)) {
+        objectPath = decodeURIComponent(pathname.substring(pathname.indexOf(storagePrefix) + storagePrefix.length));
+      } else if (pathname.includes(renderPrefix)) {
+        objectPath = decodeURIComponent(pathname.substring(pathname.indexOf(renderPrefix) + renderPrefix.length));
+      } else {
+        // Fallback: προσπαθούμε μετά το όνομα bucket όπου κι αν βρίσκεται
+        const bucketIdx = pathname.indexOf(`/${BUCKET_NAME}/`);
+        if (bucketIdx !== -1) {
+          objectPath = decodeURIComponent(pathname.substring(bucketIdx + (`/${BUCKET_NAME}/`).length));
+        }
+      }
+    } catch {}
+
+    if (!objectPath) { setToast({ message: 'Δεν βρέθηκε το path της εικόνας', type: 'error' }); return; }
 
     const { error: deleteError } = await supabase.storage.from(BUCKET_NAME).remove([objectPath]);
     if (deleteError) {
