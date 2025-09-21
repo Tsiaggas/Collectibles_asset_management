@@ -20,7 +20,7 @@ const conditionMap: { [key: string]: string } = {
 const DEFAULT_CONDITION_ID = '2500'; // Default to Near Mint for Ungraded
 
 // Function to generate the CSV content as a string
-export function generateEbayCsv(items: CardItem[]): string {
+export function generateEbayCsv(items: CardItem[], usdRate: number | null): string {
   const headers = [
     'Action',
     'Custom label (SKU)',
@@ -60,6 +60,12 @@ export function generateEbayCsv(items: CardItem[]): string {
 
     const conditionId = conditionMap[item.condition?.toLowerCase() ?? ''] || DEFAULT_CONDITION_ID;
 
+    // -->> ΝΕΟ: Υπολογισμός τιμής σε USD για το eBay
+    let priceForEbay: string | number = '';
+    if (item.price != null && usdRate != null) {
+      priceForEbay = (item.price * usdRate).toFixed(2);
+    }
+
     const row: { [key: string]: string | number } = {
       'Action': 'Add',
       'Custom label (SKU)': item.id,
@@ -70,7 +76,7 @@ export function generateEbayCsv(items: CardItem[]): string {
       'Item description': item.notes ?? `Please see photos for card condition. Card sold as is.`,
       'Format': 'FixedPrice',
       'Duration': 'GTC', // Good 'Til Cancelled
-      'Price': item.price ?? '',
+      'Price': priceForEbay,
       'Quantity': 1,
       'Item Photo URL': imageUrls,
       'Relationship': '',

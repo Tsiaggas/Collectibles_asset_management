@@ -154,7 +154,7 @@ export const App: React.FC = () => {
     
     // 1. Generate CSV
     try {
-      const csvContent = generateEbayCsv(itemsToExport);
+      const csvContent = generateEbayCsv(itemsToExport, usdRate);
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
@@ -736,16 +736,16 @@ Single\tGengar\tFossil\tLP\t39.9\tyes\ttrue\t0\tInactive\t\tshadow`}
             </div>
 
             {/* Form Fields */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <TextInput placeholder="Title" value={edit.item.title} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, title: e.target.value } })} />
-              <TextInput placeholder="Set" value={edit.item.set ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, set: e.target.value } })} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <TextInput placeholder="Title" value={edit.item.title} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, title: e.target.value } })} />
+            <TextInput placeholder="Set" value={edit.item.set ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, set: e.target.value } })} />
               <SearchableSelect
                   placeholder="-- Select Team --"
                   value={edit.item.team ?? ''}
                   onChange={(value) => setEdit({ open: true, item: { ...edit.item!, team: value } })}
                   groups={OFFICIAL_TEAMS_GROUPED.map(g => ({ label: g.league, options: g.teams }))}
               />
-              <TextInput placeholder="Condition" value={edit.item.condition ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, condition: e.target.value } })} />
+            <TextInput placeholder="Condition" value={edit.item.condition ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, condition: e.target.value } })} />
               <Select value={edit.item.numbering ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, numbering: e.target.value } })}>
                   <option value="">-- Select Numbering --</option>
                   {numberingOptions.map((n) => (
@@ -795,13 +795,13 @@ Single\tGengar\tFossil\tLP\t39.9\tyes\ttrue\t0\tInactive\t\tshadow`}
                   />
                 </div>
               </div>
-              <Select value={edit.item.status} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, status: e.target.value as CardStatus } })}>
-                {statusOptions.map((s) => (<option key={s} value={s}>{s}</option>))}
-              </Select>
-              <Select value={edit.item.kind ?? 'Single'} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, kind: e.target.value as any } })}>
-                <option value="Single">Single</option>
-                <option value="Lot">Lot</option>
-              </Select>
+            <Select value={edit.item.status} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, status: e.target.value as CardStatus } })}>
+              {statusOptions.map((s) => (<option key={s} value={s}>{s}</option>))}
+            </Select>
+            <Select value={edit.item.kind ?? 'Single'} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, kind: e.target.value as any } })}>
+              <option value="Single">Single</option>
+              <option value="Lot">Lot</option>
+            </Select>
               <div className="sm:col-span-2">
                 <TextArea 
                   placeholder="Notes" 
@@ -810,15 +810,15 @@ Single\tGengar\tFossil\tLP\t39.9\tyes\ttrue\t0\tInactive\t\tshadow`}
                   onChange={(e) => setEdit({ open: true, item: { ...edit.item!, notes: e.target.value } })} 
                 />
               </div>
-              <div className="sm:col-span-2 flex items-center gap-4">
-                <label className="inline-flex items-center gap-2"><input className="checkbox" type="checkbox" checked={edit.item.platforms.vinted} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, platforms: { ...edit.item!.platforms, vinted: e.target.checked } } })}/>Vinted</label>
-                <label className="inline-flex items-center gap-2"><input className="checkbox" type="checkbox" checked={edit.item.platforms.vendora} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, platforms: { ...edit.item!.platforms, vendora: e.target.checked } } })}/>Vendora</label>
-                <label className="inline-flex items-center gap-2"><input className="checkbox" type="checkbox" checked={edit.item.platforms.ebay} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, platforms: { ...edit.item!.platforms, ebay: e.target.checked } } })}/>eBay</label>
-              </div>
-              {/* AI buttons removed for simplicity */}
-              <div className="sm:col-span-2 flex gap-2">
-                <button className="btn btn-primary" onClick={() => { updateItem(edit.item!); setEdit({ open: false }); }}>Αποθήκευση</button>
-                <button className="btn" onClick={() => setEdit({ open: false })}>Άκυρο</button>
+            <div className="sm:col-span-2 flex items-center gap-4">
+              <label className="inline-flex items-center gap-2"><input className="checkbox" type="checkbox" checked={edit.item.platforms.vinted} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, platforms: { ...edit.item!.platforms, vinted: e.target.checked } } })}/>Vinted</label>
+              <label className="inline-flex items-center gap-2"><input className="checkbox" type="checkbox" checked={edit.item.platforms.vendora} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, platforms: { ...edit.item!.platforms, vendora: e.target.checked } } })}/>Vendora</label>
+              <label className="inline-flex items-center gap-2"><input className="checkbox" type="checkbox" checked={edit.item.platforms.ebay} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, platforms: { ...edit.item!.platforms, ebay: e.target.checked } } })}/>eBay</label>
+            </div>
+            {/* AI buttons removed for simplicity */}
+            <div className="sm:col-span-2 flex gap-2">
+              <button className="btn btn-primary" onClick={() => { updateItem(edit.item!); setEdit({ open: false }); }}>Αποθήκευση</button>
+              <button className="btn" onClick={() => setEdit({ open: false })}>Άκυρο</button>
               </div>
             </div>
           </div>
