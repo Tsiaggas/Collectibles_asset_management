@@ -426,6 +426,14 @@ serve(async (_req) => {
     // 2. Ομαδοποίηση βάσει του νέου path (UUID)
     const groupedFiles = new Map<string, any[]>();
     for (const item of queueItems) {
+      // -->> ΑΣΠΙΔΑ: Αγνοούμε τα placeholder αρχεία
+      if (item.object_name.endsWith('.emptyFolderPlaceholder')) {
+        console.log(`Ignoring placeholder file: ${item.object_name}`);
+        // Το μαρκάρουμε ως done για να μην το ξαναπροσπαθήσει
+        await supabaseAdmin.from("image_processing_queue").update({ status: 'done' }).eq('id', item.id);
+        continue;
+      }
+
       // Το path είναι πλέον: public/<group-uuid>/<role>.ext
       // Άρα το group-uuid είναι το δεύτερο στοιχείο
       const pathParts = item.object_name.split('/');
