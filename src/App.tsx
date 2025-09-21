@@ -11,6 +11,7 @@ import { ImageUploader } from './components/ImageUploader';
 import { v4 as uuidv4 } from 'uuid';
 import { OFFICIAL_TEAMS_GROUPED } from './lib/teams';
 import { SearchableSelect } from './components/SearchableSelect';
+import { generateEbayCsv } from './lib/ebay';
 
 const BUCKET_NAME = 'filacollectibles';
 
@@ -42,6 +43,10 @@ export const App: React.FC = () => {
   // -->> ΝΕΟ: State για την ισοτιμία και το input του USD
   const [usdRate, setUsdRate] = useState<number | null>(null);
   const [usdInput, setUsdInput] = useState<string>('');
+
+  // -->> ΝΕΟ: State για τη λειτουργία επιλογής eBay
+  const [isEbaySelectionMode, setIsEbaySelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
 
   // Φόρτωση αποκλειστικά από Supabase & ισοτιμίας
@@ -117,6 +122,77 @@ export const App: React.FC = () => {
       return hay.includes(q);
     });
   }, [items, filters]);
+
+  // -->> ΝΕΟ: Λογική για επιλογή/αποεπιλογή καρτών
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllFiltered = () => {
+    setSelectedIds(new Set(filtered.map(it => it.id)));
+  };
+
+  const deselectAll = () => {
+    setSelectedIds(new Set());
+  };
+
+  const handleEbayExport = async () => {
+    if (selectedIds.size === 0) {
+      setToast({ message: 'No cards selected for export', type: 'info' });
+      return;
+    }
+
+    const itemsToExport = items.filter(it => selectedIds.has(it.id));
+    
+    // 1. Generate CSV
+    try {
+      const csvContent = generateEbayCsv(itemsToExport);
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      const date = new Date().toISOString().slice(0, 10);
+      link.setAttribute('download', `ebay-upload-${date}-${selectedIds.size}-items.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error("Failed to generate CSV", error);
+      setToast({ message: 'Failed to generate CSV file', type: 'error' });
+      return; // Stop if CSV generation fails
+    }
+
+    // 2. Update status to 'Queued'
+    if (hasSupabase) {
+      const updates = itemsToExport.map(item => ({ ...item, status: 'Queued' as CardStatus }));
+      
+      const { error } = await supabase
+        .from('cards')
+        .upsert(updates.map(itemToUpdate)); // Use upsert for batch update
+
+      if (error) {
+        setToast({ message: `Failed to update card statuses: ${error.message}`, type: 'error' });
+        // Don't stop the UI update, user can manually fix later if needed
+      }
+      
+      // Update local state anyway to reflect the change immediately
+      setItems(prev => prev.map(it => selectedIds.has(it.id) ? { ...it, status: 'Queued' } : it));
+    }
+    
+    // 3. Reset UI
+    setToast({ message: `${selectedIds.size} cards exported and moved to 'Queued'`, type: 'success' });
+    setIsEbaySelectionMode(false);
+    deselectAll();
+  };
+
 
   // derive numbering options from data
   useEffect(() => {
@@ -382,7 +458,7 @@ export const App: React.FC = () => {
 
   // Drive functions removed
 
-  const statusOptions: CardStatus[] = ['New', 'Available', 'Listed', 'Inactive', 'Sold'];
+  const statusOptions: (CardStatus | 'All')[] = ['All', 'New', 'Available', 'Queued', 'Listed', 'Inactive', 'Sold'];
 
   const handleCheckPrice = (title: string) => {
     if (!title) return;
@@ -420,6 +496,9 @@ export const App: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2">
           <span className="pill bg-gray-200 dark:bg-gray-700">{hasSupabase ? 'Mode: Supabase' : 'Supabase: not configured'}</span>
           <button className="btn btn-primary" onClick={() => setUploadOpen(true)}>Upload Images</button>
+          <button className="btn" onClick={() => setIsEbaySelectionMode(!isEbaySelectionMode)}>
+            {isEbaySelectionMode ? 'Cancel eBay Selection' : 'Prepare for eBay'}
+          </button>
           <button className="btn" onClick={() => setBulkOpen(true)}>Bulk import</button>
           {/* Bulk images removed */}
           <button className="btn" onClick={exportJson}>Export JSON</button>
@@ -439,7 +518,6 @@ export const App: React.FC = () => {
       <section className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <TextInput placeholder="Αναζήτηση τίτλου/σετ/σημειώσεων/ομάδας" value={filters.query} onChange={(e) => setFilters({ ...filters, query: e.target.value })} />
         <Select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value as Filters['status'] })}>
-          <option value="All">All</option>
           {statusOptions.map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
@@ -478,7 +556,22 @@ export const App: React.FC = () => {
       ) : (
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((it) => (
-            <li key={it.id} className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+            <li key={it.id} className={`relative overflow-hidden rounded-lg border bg-white dark:bg-gray-800 shadow-sm transition-all ${isEbaySelectionMode ? (selectedIds.has(it.id) ? 'border-indigo-500 ring-2 ring-indigo-500' : 'border-gray-200 dark:border-gray-700') : 'border-gray-200 dark:border-gray-700'}`}>
+              {isEbaySelectionMode && (
+                <div 
+                  className="absolute inset-0 z-10 cursor-pointer"
+                  onClick={() => toggleSelection(it.id)}
+                >
+                  <div className="absolute top-2 left-2">
+                    <input 
+                      type="checkbox" 
+                      className="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      checked={selectedIds.has(it.id)}
+                      readOnly
+                    />
+                  </div>
+                </div>
+              )}
               <div className="aspect-[4/2.5] w-full bg-gray-100 dark:bg-gray-700">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={it.image_url_front || DEFAULT_PLACEHOLDER_IMAGE} alt={it.title} className="h-full w-full object-contain" />
@@ -522,6 +615,26 @@ export const App: React.FC = () => {
             </li>
           ))}
         </ul>
+      )}
+
+      {/* -->> ΝΕΟ: Μπάρα επιλογής eBay -->> */}
+      {isEbaySelectionMode && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 p-4 shadow-lg z-20">
+          <div className="mx-auto max-w-6xl flex items-center justify-between">
+            <div className="font-semibold">{selectedIds.size} cards selected</div>
+            <div className="flex items-center gap-3">
+              <button className="btn" onClick={selectAllFiltered}>Select All Visible</button>
+              <button className="btn" onClick={deselectAll}>Deselect All</button>
+              <button 
+                className="btn btn-primary" 
+                disabled={selectedIds.size === 0}
+                onClick={handleEbayExport}
+              >
+                Generate eBay CSV
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <Modal open={uploadOpen} title="Upload Card Images" onClose={() => setUploadOpen(false)}>

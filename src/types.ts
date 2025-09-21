@@ -4,7 +4,7 @@ export type PlatformFlags = {
   ebay: boolean;
 };
 
-export type CardStatus = 'New' | 'Available' | 'Listed' | 'Inactive' | 'Sold';
+export type CardStatus = 'New' | 'Available' | 'Listed' | 'Inactive' | 'Sold' | 'Queued';
 
 export interface CardItem {
   id: string;
@@ -39,30 +39,16 @@ export type JsonExport = {
   items: CardItem[];
 };
 
-export const DEFAULT_PLACEHOLDER_IMAGE =
-  'data:image/svg+xml;utf8,' +
-  encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 250">` +
-      `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#e5e7eb"/><stop offset="100%" stop-color="#d1d5db"/></linearGradient></defs>` +
-      `<rect width="100%" height="100%" fill="url(#g)"/>` +
-      `<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#6b7280" font-family="system-ui, -apple-system, Segoe UI, Roboto" font-size="20">No Image</text>` +
-    `</svg>`
-  );
+export const BUCKET_NAME = 'filacollectibles';
+export const DEFAULT_PLACEHOLDER_IMAGE = 'https://app.filamvp.com/placeholder.png';
 
-export const nextStatus = (status: CardStatus): CardStatus => {
-  switch (status) {
-    case 'New':
-      return 'Available';
-    case 'Available':
-      return 'Listed';
-    case 'Listed':
-      return 'Sold';
-    case 'Sold':
-      return 'Inactive';
-    case 'Inactive':
-    default:
-      return 'Available';
-  }
+export const nextStatus = (s: CardStatus): CardStatus => {
+  if (s === 'New') return 'Available';
+  if (s === 'Available') return 'Listed';
+  if (s === 'Listed') return 'Sold';
+  if (s === 'Sold') return 'Inactive';
+  if (s === 'Inactive') return 'Available';
+  return 'Queued';
 };
 
 
