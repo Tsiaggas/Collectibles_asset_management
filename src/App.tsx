@@ -534,7 +534,8 @@ Single\tGengar\tFossil\tLP\t39.9\tyes\ttrue\t0\tInactive\t\tshadow`}
                       {/* Download Button */}
                       <a 
                         href={img.url!}
-                        download
+                        target="_blank" 
+                        rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
                         className="text-white p-2 bg-blue-600 rounded-full hover:bg-blue-700 transition-colors"
                         aria-label="Download image"
@@ -578,9 +579,19 @@ Single\tGengar\tFossil\tLP\t39.9\tyes\ttrue\t0\tInactive\t\tshadow`}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <TextInput placeholder="Title" value={edit.item.title} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, title: e.target.value } })} />
               <TextInput placeholder="Set" value={edit.item.set ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, set: e.target.value } })} />
-              <TextInput placeholder="Team" value={edit.item.team ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, team: e.target.value } })} />
+              <Select value={edit.item.team ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, team: e.target.value } })}>
+                  <option value="">-- Select Team --</option>
+                  {teamOptions.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+              </Select>
               <TextInput placeholder="Condition" value={edit.item.condition ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, condition: e.target.value } })} />
-              <TextInput placeholder="Numbering" value={edit.item.numbering ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, numbering: e.target.value } })} />
+              <Select value={edit.item.numbering ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, numbering: e.target.value } })}>
+                  <option value="">-- Select Numbering --</option>
+                  {numberingOptions.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+              </Select>
               <TextInput placeholder="Price" type="number" inputMode="decimal" value={edit.item.price ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, price: e.target.value ? Number(e.target.value) : undefined } })} />
               <Select value={edit.item.status} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, status: e.target.value as CardStatus } })}>
                 {statusOptions.map((s) => (<option key={s} value={s}>{s}</option>))}
