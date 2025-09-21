@@ -532,9 +532,21 @@ serve(async (_req) => {
           // It's a different, likely permanent error (e.g., bad AI response).
           // Mark these as 'error' for manual review.
           console.error(`Permanent error for group ${groupId}. Marking as 'error'.`);
-          await supabaseAdmin.from("image_processing_queue").update({ status: 'error' }).in('id', idsToUpdate);
+        await supabaseAdmin.from("image_processing_queue").update({ status: 'error' }).in('id', idsToUpdate);
         }
       }
     }
 
-    return new Response(JSON.stringify({ message: `Processed ${groupedFiles.size} groups.`
+    return new Response(JSON.stringify({ message: `Processed ${groupedFiles.size} groups.` }), { 
+      headers: { "Content-Type": "application/json" },
+      status: 200 
+    });
+
+  } catch (e: any) {
+    console.error("An unexpected error occurred in the main block:", e);
+    return new Response(JSON.stringify({ error: 'Bad request or unexpected error', details: e.message }), { 
+      headers: { "Content-Type": "application/json" },
+      status: 400 
+    });
+  }
+});
