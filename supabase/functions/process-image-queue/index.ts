@@ -11,6 +11,7 @@ Your response MUST be in JSON format. Prioritize the 'front' image for primary d
 **CRITICAL FIRST STEP: Determine if this is a 'Single' card or a 'Lot'.**
 - If only ONE card is clearly depicted, proceed as a 'Single'.
 - If MULTIPLE distinct cards are visible, you MUST treat it as a 'Lot'.
+- IMPORTANT: Even if multiple images are provided (e.g., front, back, close-up), if they all show the SAME card, it is still a 'Single'. A 'Lot' is ONLY for multiple, DIFFERENT cards in the images.
 
 **JSON Schema & Instructions:**
 
@@ -36,9 +37,25 @@ Your response MUST be in JSON format. Prioritize the 'front' image for primary d
 
 // Helper για "καθαρισμό" ονομάτων ομάδων
 const teamNameMap: { [key: string]: string } = {
-  // Germany (Originals)
-  'fc bayern münchen': 'FC Bayern Munich', 'bayern munich': 'FC Bayern Munich', 'bayern münchen': 'FC Bayern Munich',
-  'fsv mainz 05': 'FSV Mainz 05', 'mainz 05': 'FSV Mainz 05',
+  // Germany: Bundesliga
+  'fc bayern münchen': 'FC Bayern Munich', 'bayern munich': 'FC Bayern Munich', 'bayern münchen': 'FC Bayern Munich', 'bayern': 'FC Bayern Munich', 'fcb': 'FC Bayern Munich', 'μπάγερν μοναχου': 'FC Bayern Munich',
+  'bayer 04 leverkusen': 'Bayer 04 Leverkusen', 'bayer leverkusen': 'Bayer 04 Leverkusen', 'leverkusen': 'Bayer 04 Leverkusen', 'werkself': 'Bayer 04 Leverkusen', 'μπάγερ λεβερκούζεν': 'Bayer 04 Leverkusen',
+  'vfb stuttgart': 'VfB Stuttgart', 'stuttgart': 'VfB Stuttgart', 'die schwaben': 'VfB Stuttgart', 'στουτγκάρδη': 'VfB Stuttgart',
+  'rb leipzig': 'RB Leipzig', 'leipzig': 'RB Leipzig', 'die roten bullen': 'RB Leipzig', 'λάιπτσιχ': 'RB Leipzig',
+  'borussia dortmund': 'Borussia Dortmund', 'dortmund': 'Borussia Dortmund', 'bvb': 'Borussia Dortmund', 'bvb 09': 'Borussia Dortmund', 'ντόρτμουντ': 'Borussia Dortmund',
+  'eintracht frankfurt': 'Eintracht Frankfurt', 'frankfurt': 'Eintracht Frankfurt', 'sge': 'Eintracht Frankfurt', 'die adler': 'Eintracht Frankfurt', 'άιντραχτ φρανκφούρτης': 'Eintracht Frankfurt',
+  'tsg 1899 hoffenheim': 'TSG Hoffenheim', 'tsg hoffenheim': 'TSG Hoffenheim', 'hoffenheim': 'TSG Hoffenheim', 'χόφενχαϊμ': 'TSG Hoffenheim',
+  '1. fc heidenheim': '1. FC Heidenheim', 'heidenheim': '1. FC Heidenheim', 'fch': '1. FC Heidenheim', 'χάιντενχαϊμ': '1. FC Heidenheim',
+  'sv werder bremen': 'SV Werder Bremen', 'werder bremen': 'SV Werder Bremen', 'bremen': 'SV Werder Bremen', 'svw': 'SV Werder Bremen', 'βέρντερ βρέμης': 'SV Werder Bremen',
+  'sc freiburg': 'SC Freiburg', 'freiburg': 'SC Freiburg', 'scf': 'SC Freiburg', 'φράιμπουργκ': 'SC Freiburg',
+  'fc augsburg': 'FC Augsburg', 'augsburg': 'FC Augsburg', 'fca': 'FC Augsburg', 'άουγκσμπουργκ': 'FC Augsburg',
+  'vfl wolfsburg': 'VfL Wolfsburg', 'wolfsburg': 'VfL Wolfsburg', 'die wölfe': 'VfL Wolfsburg', 'βόλφσμπουργκ': 'VfL Wolfsburg',
+  'fsv mainz 05': 'FSV Mainz 05', 'mainz 05': 'FSV Mainz 05', 'mainz': 'FSV Mainz 05', 'μάιντς': 'FSV Mainz 05',
+  'borussia mönchengladbach': 'Borussia Mönchengladbach', 'mönchengladbach': 'Borussia Mönchengladbach', 'gladbach': 'Borussia Mönchengladbach', 'bmg': 'Borussia Mönchengladbach', 'γκλάντμπαχ': 'Borussia Mönchengladbach',
+  '1. fc union berlin': '1. FC Union Berlin', 'union berlin': '1. FC Union Berlin', 'die eisernen': '1. FC Union Berlin', 'ούνιον βερολίνου': '1. FC Union Berlin',
+  'vfl bochum': 'VfL Bochum', 'bochum': 'VfL Bochum', 'μπόχουμ': 'VfL Bochum',
+  'fc st. pauli': 'FC St. Pauli', 'st. pauli': 'FC St. Pauli', 'kiezkicker': 'FC St. Pauli', 'σανκτ πάουλι': 'FC St. Pauli',
+  'holstein kiel': 'Holstein Kiel', 'kiel': 'Holstein Kiel', 'die störche': 'Holstein Kiel', 'χόλσταϊν κίελου': 'Holstein Kiel',
 
   // England: Premier League
   'arsenal fc': 'Arsenal FC', 'arsenal': 'Arsenal FC', 'afc': 'Arsenal FC', 'gunners': 'Arsenal FC', 'άρσεναλ': 'Arsenal FC',
@@ -477,7 +494,7 @@ serve(async (_req) => {
           condition: aiResult.condition,
           team: normalizedTeam,
           notes: aiResult.notes,
-          kind: aiResult.kind || (items.length > 2 ? 'Lot' : 'Single'), // Improved fallback
+          kind: aiResult.kind || 'Single', // Safer fallback: default to Single
           status: 'New',
           numbering: aiResult.numbering,
           image_url_front: primaryImageUrl,
@@ -520,10 +537,4 @@ serve(async (_req) => {
       }
     }
 
-    return new Response(JSON.stringify({ message: `Processed ${groupedFiles.size} groups.` }), { status: 200 });
-
-  } catch (e: any) {
-    console.error("An unexpected error occurred in the main block:", e);
-    return new Response(JSON.stringify({ error: 'Bad request or unexpected error', details: e.message }), { status: 400 });
-  }
-});
+    return new Response(JSON.stringify({ message: `Processed ${groupedFiles.size} groups.`
