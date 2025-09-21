@@ -495,15 +495,20 @@ serve(async (_req) => {
                                  e.message.includes("Bad gateway") ||
                                  e.message.includes("500") ||
                                  e.message.includes("503") ||
-                                 e.message.includes("504");
+                                 e.message.includes("504") ||
+                                 e.message.includes("Failed to download");
 
-        // Τώρα, ΟΛΑ τα λάθη είναι μόνιμα γιατί δεν υπάρχει retry mechanism με cron.
-        // Αν αποτύχει, πρέπει να το δει ο χρήστης.
         if (isTransientError) {
-          console.warn(`Transient error for ${groupId}. Marking as 'error' for manual review.`);
+          // It's a rate limit or server error. Just log it and do nothing.
+          // The cron job will automatically retry this group in the next run
+          // because its status will remain 'new'.
+          console.warn(`Transient error for group ${groupId}. Will retry on next cron run.`);
+        } else {
+          // It's a different, likely permanent error (e.g., bad AI response).
+          // Mark these as 'error' for manual review.
+          console.error(`Permanent error for group ${groupId}. Marking as 'error'.`);
+          await supabaseAdmin.from("image_processing_queue").update({ status: 'error' }).in('id', idsToUpdate);
         }
-        
-        await supabaseAdmin.from("image_processing_queue").update({ status: 'error' }).in('id', idsToUpdate);
       }
     }
 
