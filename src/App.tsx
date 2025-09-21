@@ -30,7 +30,6 @@ export const App: React.FC = () => {
     team: 'All',
     numbering: 'All',
   });
-  const [teamOptions, setTeamOptions] = useState<string[]>([]);
   const [numberingOptions, setNumberingOptions] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -118,14 +117,6 @@ export const App: React.FC = () => {
       return hay.includes(q);
     });
   }, [items, filters]);
-
-  // derive team options from data
-  useEffect(() => {
-    const teamsFromItems = items.map((i) => (i.team || '').trim()).filter(Boolean);
-    const combined = Array.from(new Set([...teamsFromItems, ...OFFICIAL_TEAMS_GROUPED.flatMap(g => g.teams)]));
-    const sorted = combined.sort((a, b) => a.localeCompare(b));
-    setTeamOptions(sorted);
-  }, [items]);
 
   // derive numbering options from data
   useEffect(() => {
@@ -458,12 +449,15 @@ export const App: React.FC = () => {
           <option value="Single">Single</option>
           <option value="Lot">Lot</option>
         </Select>
-        <Select value={filters.team} onChange={(e) => setFilters({ ...filters, team: e.target.value as Filters['team'] })}>
-          <option value="All">All teams</option>
-          {teamOptions.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </Select>
+        <SearchableSelect
+          placeholder="All teams"
+          value={filters.team === 'All' ? '' : filters.team}
+          onChange={(value) => setFilters({ ...filters, team: value || 'All' })}
+          groups={[
+            { label: 'Filter Actions', options: ['All'] },
+            ...OFFICIAL_TEAMS_GROUPED.map(g => ({ label: g.league, options: g.teams }))
+          ]}
+        />
         <Select value={filters.numbering} onChange={(e) => setFilters({ ...filters, numbering: e.target.value })}>
           <option value="All">All numberings</option>
           {numberingOptions.map((n) => (
