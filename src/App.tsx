@@ -9,6 +9,8 @@ import { Toast, ToastData } from './components/Toast';
 import { Checkbox, Select, TextArea, TextInput } from './components/Inputs';
 import { ImageUploader } from './components/ImageUploader';
 import { v4 as uuidv4 } from 'uuid';
+import { OFFICIAL_TEAMS_GROUPED } from './lib/teams';
+import { SearchableSelect } from './components/SearchableSelect';
 
 const BUCKET_NAME = 'filacollectibles';
 
@@ -119,8 +121,10 @@ export const App: React.FC = () => {
 
   // derive team options from data
   useEffect(() => {
-    const teams = Array.from(new Set(items.map((i) => (i.team || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
-    setTeamOptions(teams);
+    const teamsFromItems = items.map((i) => (i.team || '').trim()).filter(Boolean);
+    const combined = Array.from(new Set([...teamsFromItems, ...OFFICIAL_TEAMS_GROUPED.flatMap(g => g.teams)]));
+    const sorted = combined.sort((a, b) => a.localeCompare(b));
+    setTeamOptions(sorted);
   }, [items]);
 
   // derive numbering options from data
@@ -628,12 +632,12 @@ Single\tGengar\tFossil\tLP\t39.9\tyes\ttrue\t0\tInactive\t\tshadow`}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <TextInput placeholder="Title" value={edit.item.title} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, title: e.target.value } })} />
               <TextInput placeholder="Set" value={edit.item.set ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, set: e.target.value } })} />
-              <Select value={edit.item.team ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, team: e.target.value } })}>
-                  <option value="">-- Select Team --</option>
-                  {teamOptions.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-              </Select>
+              <SearchableSelect
+                  placeholder="-- Select Team --"
+                  value={edit.item.team ?? ''}
+                  onChange={(value) => setEdit({ open: true, item: { ...edit.item!, team: value } })}
+                  groups={OFFICIAL_TEAMS_GROUPED.map(g => ({ label: g.league, options: g.teams }))}
+              />
               <TextInput placeholder="Condition" value={edit.item.condition ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, condition: e.target.value } })} />
               <Select value={edit.item.numbering ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, numbering: e.target.value } })}>
                   <option value="">-- Select Numbering --</option>
