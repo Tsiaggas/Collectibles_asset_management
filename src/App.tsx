@@ -38,7 +38,12 @@ export const App: React.FC = () => {
   const [toast, setToast] = useState<ToastData | null>(null);
   // Drive state removed
 
-  // Φόρτωση αποκλειστικά από Supabase
+  // -->> ΝΕΟ: State για την ισοτιμία και το input του USD
+  const [usdRate, setUsdRate] = useState<number | null>(null);
+  const [usdInput, setUsdInput] = useState<string>('');
+
+
+  // Φόρτωση αποκλειστικά από Supabase & ισοτιμίας
   useEffect(() => {
     (async () => {
       if (!hasSupabase) {
@@ -57,7 +62,33 @@ export const App: React.FC = () => {
       }
       setItems((data ?? []).map(rowToItem));
     })();
+    
+    // -->> ΝΕΟ: Fetch ισοτιμίας EUR-USD
+    (async () => {
+      try {
+        const res = await fetch('https://api.frankfurter.app/latest?from=EUR&to=USD');
+        if (!res.ok) throw new Error('Failed to fetch rate');
+        const data = await res.json();
+        setUsdRate(data.rates.USD);
+      } catch (error) {
+        console.error("Could not fetch exchange rate:", error);
+        setToast({ message: 'Could not fetch USD exchange rate.', type: 'error' });
+      }
+    })();
   }, []);
+
+  // -->> ΝΕΟ: Effect για συγχρονισμό των inputs τιμής όταν ανοίγει το modal
+  useEffect(() => {
+    if (edit.open && edit.item && usdRate) {
+      const priceInEur = edit.item.price;
+      if (priceInEur != null) {
+        setUsdInput((priceInEur * usdRate).toFixed(2));
+      } else {
+        setUsdInput('');
+      }
+    }
+  }, [edit.open, edit.item?.id, usdRate]); // Trigger when modal opens for a new item
+
 
   // Αφαιρέθηκε κάθε συγχρονισμός με localStorage
 
@@ -369,10 +400,28 @@ export const App: React.FC = () => {
     });
   };
 
+  const resetApp = () => {
+    setFilters({
+      query: '',
+      status: 'All',
+      platforms: { onlyChecked: false },
+      kind: 'All',
+      team: 'All',
+      numbering: 'All',
+    });
+    window.scrollTo(0, 0);
+  };
+
   return (
     <div className="mx-auto max-w-6xl p-4">
       <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl font-semibold">Card Inventory MVP</h1>
+        <h1 
+          className="text-xl font-semibold cursor-pointer hover:text-indigo-400 transition-colors" 
+          onClick={resetApp}
+          title="Reset filters and return to top"
+        >
+          Card Inventory MVP
+        </h1>
         <div className="flex flex-wrap items-center gap-2">
           <span className="pill bg-gray-200 dark:bg-gray-700">{hasSupabase ? 'Mode: Supabase' : 'Supabase: not configured'}</span>
           <button className="btn btn-primary" onClick={() => setUploadOpen(true)}>Upload Images</button>
@@ -592,7 +641,49 @@ Single\tGengar\tFossil\tLP\t39.9\tyes\ttrue\t0\tInactive\t\tshadow`}
                     <option key={n} value={n}>{n}</option>
                   ))}
               </Select>
-              <TextInput placeholder="Price" type="number" inputMode="decimal" value={edit.item.price ?? ''} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, price: e.target.value ? Number(e.target.value) : undefined } })} />
+              {/* -->> ΝΕΟ: Διπλό input για τιμή EUR/USD */}
+              <div className="sm:col-span-2 grid grid-cols-2 gap-3 items-end">
+                <div>
+                  <label className="text-xs font-medium text-gray-500">Price (€ EUR)</label>
+                  <TextInput
+                    placeholder="Price in EUR"
+                    type="number"
+                    inputMode="decimal"
+                    value={edit.item.price ?? ''}
+                    onChange={(e) => {
+                      const newPriceEurStr = e.target.value;
+                      const newPriceEur = newPriceEurStr ? Number(newPriceEurStr) : undefined;
+                      setEdit({ open: true, item: { ...edit.item!, price: newPriceEur } });
+                      if (newPriceEur != null && usdRate) {
+                        setUsdInput((newPriceEur * usdRate).toFixed(2));
+                      } else {
+                        setUsdInput('');
+                      }
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500">Price ($ USD)</label>
+                  <TextInput
+                    placeholder={usdRate ? "Price in USD" : "Loading rate..."}
+                    type="number"
+                    inputMode="decimal"
+                    disabled={!usdRate}
+                    value={usdInput}
+                    onChange={(e) => {
+                      const newPriceUsdStr = e.target.value;
+                      setUsdInput(newPriceUsdStr);
+                      if (usdRate) {
+                        const newPriceUsd = newPriceUsdStr ? Number(newPriceUsdStr) : undefined;
+                        const newPriceEur = newPriceUsd != null ? newPriceUsd / usdRate : undefined;
+                        // Round to 2 decimal places for consistency
+                        const finalPriceEur = newPriceEur != null ? parseFloat(newPriceEur.toFixed(2)) : undefined;
+                        setEdit({ open: true, item: { ...edit.item!, price: finalPriceEur } });
+                      }
+                    }}
+                  />
+                </div>
+              </div>
               <Select value={edit.item.status} onChange={(e) => setEdit({ open: true, item: { ...edit.item!, status: e.target.value as CardStatus } })}>
                 {statusOptions.map((s) => (<option key={s} value={s}>{s}</option>))}
               </Select>
